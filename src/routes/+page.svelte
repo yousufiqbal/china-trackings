@@ -24,6 +24,8 @@
 	import { openLightbox } from '$lib/lightbox.svelte';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SearchIcon from '@lucide/svelte/icons/search';
+	import XIcon from '@lucide/svelte/icons/x';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import ImageIcon from '@lucide/svelte/icons/image';
 	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
@@ -37,7 +39,7 @@
 	let advanceTarget = $state<Tracking | null>(null);
 	let commentTarget = $state<Tracking | null>(null);
 	let editTarget = $state<Tracking | null>(null);
-	let showReceipt = $derived(data.filter.status !== 'ordered');
+	let showReceipt = $derived(data.filter.status !== 'ordered' || !!data.filter.q);
 	let addOpen = $state(false);
 	let logoutForm = $state<HTMLFormElement | null>(null);
 	// svelte-ignore state_referenced_locally
@@ -64,13 +66,18 @@
 		goto(s ? `/?${s}` : '/', { keepFocus: true });
 	}
 
+	function clearSearch() {
+		q = '';
+		goto(filterHref(data.filter.status));
+	}
+
 	const DATE_HEAD: Record<Status, string> = {
 		ordered: 'Ordered on',
 		warehoused: 'Warehoused on',
 		delivered: 'Delivered on',
 		lost: 'Lost on'
 	};
-	let dateHead = $derived(DATE_HEAD[data.filter.status as Status]);
+	let dateHead = $derived(data.filter.q ? 'Status date' : DATE_HEAD[data.filter.status as Status]);
 
 	// Same hues as StatusBadge, for the mobile bottom nav.
 	const NAV_COUNT: Record<Status, string> = {
@@ -110,7 +117,7 @@
 
 <svelte:head><title>Dashboard · Trackings</title></svelte:head>
 
-<div class="grid min-w-0 gap-6 pb-20 md:pb-0">
+<div class="grid min-w-0 gap-6 pb-24 md:pb-0">
 	<div class="flex items-center justify-between gap-3">
 		<div class="flex min-w-0 items-center gap-3">
 			<img src="/icon.svg" alt="" class="size-9 shrink-0 rounded-lg" />
@@ -168,8 +175,30 @@
 	<section class="grid min-w-0 gap-3">
 		<form onsubmit={search} class="relative sm:ml-auto sm:w-72">
 			<SearchIcon class="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-			<Input bind:value={q} placeholder="Search number, comment…" class="pl-8" />
+			<Input bind:value={q} placeholder="Search number, comment…" class="pr-8 pl-8" />
+			{#if q}
+				<button
+					type="button"
+					class="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5"
+					aria-label="Clear search"
+					onclick={clearSearch}
+				>
+					<XIcon class="size-4" />
+				</button>
+			{/if}
 		</form>
+
+		{#if data.filter.q}
+			<div class="bg-muted/60 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm">
+				<span>
+					{data.trackings.length} result{data.trackings.length === 1 ? '' : 's'} for
+					<strong>"{data.filter.q}"</strong> across all statuses
+				</span>
+				<Button variant="outline" size="sm" onclick={clearSearch}>
+					<ArrowLeftIcon /> Back to {STATUS_LABEL[data.filter.status as Status]}
+				</Button>
+			</div>
+		{/if}
 
 		{#if staleCount > 0}
 			<div
@@ -345,14 +374,14 @@
 				href={filterHref(tile.status)}
 				aria-current={active ? 'page' : undefined}
 				class={cn(
-					'flex flex-col items-center border-t-2 px-1 py-2 text-center leading-tight transition-colors',
+					'flex flex-col items-center gap-0.5 border-t-2 px-1 py-3 text-center leading-tight transition-colors',
 					active ? NAV_ACTIVE[tile.status] : 'text-muted-foreground border-transparent'
 				)}
 			>
-				<span class={cn('text-base font-semibold tabular-nums', NAV_COUNT[tile.status])}>
+				<span class={cn('text-xl font-semibold tabular-nums', NAV_COUNT[tile.status])}>
 					{data.counts[tile.status]}
 				</span>
-				<span class="text-[11px]">{STATUS_LABEL[tile.status]}</span>
+				<span class="text-xs">{STATUS_LABEL[tile.status]}</span>
 			</a>
 		{/each}
 	</div>

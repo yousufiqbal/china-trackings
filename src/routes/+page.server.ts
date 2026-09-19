@@ -17,7 +17,11 @@ export const load: PageServerLoad = async ({ url }) => {
 	const status: Status = isStatus(s) ? s : 'ordered';
 	const q = url.searchParams.get('q') ?? '';
 
-	const [trackings, counts] = await Promise.all([listTrackings({ status, q }), countByStatus()]);
+	// A search spans every status; otherwise show the selected status only.
+	const [trackings, counts] = await Promise.all([
+		listTrackings({ status: q ? 'all' : status, q }),
+		countByStatus()
+	]);
 	return { trackings, counts, filter: { status, q }, now: Date.now() };
 };
 

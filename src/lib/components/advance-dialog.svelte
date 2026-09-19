@@ -70,15 +70,6 @@
 
 				{#if next === 'warehoused'}
 					<div class="grid gap-2">
-						<Label for="receipt_ref">Warehouse receipt no.</Label>
-						<Input
-							id="receipt_ref"
-							name="receipt_ref"
-							placeholder="Optional"
-							value={tracking.receipt_ref ?? ''}
-						/>
-					</div>
-					<div class="grid gap-2">
 						<Label>Receipt photo <span class="text-muted-foreground font-normal">(optional)</span></Label>
 						<FileDrop bind:file={photo} />
 					</div>
