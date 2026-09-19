@@ -46,7 +46,6 @@
 
 	let staleCount = $derived(data.trackings.filter((t) => isStale(t, data.now)).length);
 	let activeCount = $derived(data.counts.ordered + data.counts.warehoused);
-	let totalCount = $derived(activeCount + data.counts.delivered + data.counts.lost);
 
 	function filterHref(status: string) {
 		const p = new URLSearchParams();
@@ -117,7 +116,7 @@
 			<img src="/icon.svg" alt="" class="size-9 shrink-0 rounded-lg" />
 			<div class="min-w-0">
 				<h1 class="text-xl font-semibold tracking-tight sm:text-2xl">Trackings</h1>
-				<p class="text-muted-foreground truncate text-sm">{activeCount} still on the way, {totalCount} total</p>
+				<p class="text-muted-foreground truncate text-sm">{activeCount} pending delivery</p>
 			</div>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
