@@ -16,5 +16,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		redirect(303, '/');
 	}
 
-	return resolve(event);
+	const response = await resolve(event);
+	// Pages and data must never be served stale (installed PWA relaunches, bfcache).
+	if (!path.startsWith('/photos/') && !path.startsWith('/_app/')) {
+		response.headers.set('Cache-Control', 'no-store');
+	}
+	return response;
 };

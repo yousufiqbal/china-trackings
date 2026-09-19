@@ -13,6 +13,32 @@
 
 	let saving = $state(false);
 	let open = $derived(tracking !== null);
+	let text = $state('');
+	let textarea = $state<HTMLTextAreaElement | null>(null);
+
+	// Load the current comment whenever a (different) tracking is opened.
+	$effect(() => {
+		text = tracking?.notes ?? '';
+	});
+
+	// One-click phrases. Edit this list to taste.
+	const QUICK = ['Pending Receipt, Alerted'];
+
+	/** Append a phrase (comma-separated) unless it is already in the comment. */
+	function addQuick(phrase: string) {
+		const parts = text
+			.split(/[,\n]/)
+			.map((p) => p.trim().toLowerCase())
+			.filter(Boolean);
+		const wanted = phrase
+			.split(',')
+			.map((p) => p.trim())
+			.filter((p) => !parts.includes(p.toLowerCase()));
+		if (!wanted.length) return;
+		const base = text.trim().replace(/,\s*$/, '');
+		text = base ? `${base}, ${wanted.join(', ')}` : wanted.join(', ');
+		textarea?.focus();
+	}
 </script>
 
 <Dialog.Root
@@ -48,12 +74,21 @@
 					<Dialog.Description class="font-mono">{tracking.tracking_no}</Dialog.Description>
 				</Dialog.Header>
 
+				<div class="flex flex-wrap gap-2">
+					{#each QUICK as q (q)}
+						<Button type="button" variant="secondary" size="sm" onclick={() => addQuick(q)}>
+							+ {q}
+						</Button>
+					{/each}
+				</div>
+
 				<Textarea
+					bind:ref={textarea}
+					bind:value={text}
 					name="comment"
 					rows={5}
 					autofocus
 					maxlength={2000}
-					value={tracking.notes ?? ''}
 					placeholder="What is it, who sent it, anything worth remembering…"
 					onkeydown={(e) => {
 						if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') e.currentTarget.form?.requestSubmit();

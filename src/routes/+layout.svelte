@@ -1,45 +1,40 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
 	import { Toaster } from '$lib/components/ui/sonner';
 	import Lightbox from '$lib/components/lightbox.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import PackageIcon from '@lucide/svelte/icons/package';
-	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import { invalidateAll } from '$app/navigation';
 
-	let { children, data } = $props();
+	let { children } = $props();
 </script>
 
+<!-- Installed PWAs keep the page alive in the background; refetch when it comes back. -->
+<svelte:document
+	onvisibilitychange={() => {
+		if (document.visibilityState === 'visible') invalidateAll();
+	}}
+/>
+<svelte:window onpageshow={(e) => e.persisted && invalidateAll()} />
+
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href="/icon.svg" type="image/svg+xml" />
 	<title>Trackings</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+	<link rel="manifest" href="/manifest.webmanifest" />
+	<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+	<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+	<meta name="apple-mobile-web-app-title" content="Trackings" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 </svelte:head>
 
 <Toaster richColors position="top-center" />
 <Lightbox />
 
 <div class="bg-background text-foreground min-h-dvh">
-	{#if data.user}
-		<header class="border-border/60 bg-background/80 sticky top-0 z-30 border-b backdrop-blur">
-			<div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
-				<a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
-					<span class="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-md">
-						<PackageIcon class="size-4" />
-					</span>
-					<span>Trackings</span>
-				</a>
-				<form method="POST" action="/logout">
-					<Button type="submit" variant="ghost" size="sm" class="text-muted-foreground">
-						<LogOutIcon class="size-4" />
-						<span class="hidden sm:inline">Log out</span>
-					</Button>
-				</form>
-			</div>
-		</header>
-	{/if}
 
-	<main class="mx-auto w-full min-w-0 max-w-6xl px-4 py-6 sm:py-8">
+	<main class="mx-auto w-full min-w-0 max-w-6xl px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:py-8">
 		{@render children()}
 	</main>
 </div>

@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Table from '$lib/components/ui/table';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import StatusBadge from '$lib/components/status-badge.svelte';
 	import AddDialog from '$lib/components/add-dialog.svelte';
 	import AdvanceDialog from '$lib/components/advance-dialog.svelte';
@@ -27,6 +28,8 @@
 	import ImageIcon from '@lucide/svelte/icons/image';
 	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
 	import CopyIcon from '@lucide/svelte/icons/copy';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { toast } from 'svelte-sonner';
 
 	let { data } = $props();
@@ -36,6 +39,7 @@
 	let editTarget = $state<Tracking | null>(null);
 	let showReceipt = $derived(data.filter.status !== 'ordered');
 	let addOpen = $state(false);
+	let logoutForm = $state<HTMLFormElement | null>(null);
 	// svelte-ignore state_referenced_locally
 	let q = $state(data.filter.q);
 
@@ -69,6 +73,20 @@
 	};
 	let dateHead = $derived(DATE_HEAD[data.filter.status as Status]);
 
+	// Same hues as StatusBadge, for the mobile bottom nav.
+	const NAV_COUNT: Record<Status, string> = {
+		ordered: 'text-blue-600 dark:text-blue-300',
+		warehoused: 'text-amber-600 dark:text-amber-300',
+		delivered: 'text-emerald-600 dark:text-emerald-300',
+		lost: 'text-red-600 dark:text-red-300'
+	};
+	const NAV_ACTIVE: Record<Status, string> = {
+		ordered: 'border-blue-500 bg-blue-500/10 text-blue-800 dark:text-blue-200',
+		warehoused: 'border-amber-500 bg-amber-500/10 text-amber-800 dark:text-amber-200',
+		delivered: 'border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200',
+		lost: 'border-red-500 bg-red-500/10 text-red-800 dark:text-red-200'
+	};
+
 	async function copyNo(no: string) {
 		try {
 			await navigator.clipboard.writeText(no);
@@ -93,19 +111,39 @@
 
 <svelte:head><title>Dashboard · Trackings</title></svelte:head>
 
-<div class="grid min-w-0 gap-6">
+<div class="grid min-w-0 gap-6 pb-20 md:pb-0">
 	<div class="flex items-center justify-between gap-3">
-		<div>
-			<h1 class="text-xl font-semibold tracking-tight sm:text-2xl">Parcels</h1>
-			<p class="text-muted-foreground text-sm">{activeCount} still on the way, {totalCount} total</p>
+		<div class="flex min-w-0 items-center gap-3">
+			<img src="/icon.svg" alt="" class="size-9 shrink-0 rounded-lg" />
+			<div class="min-w-0">
+				<h1 class="text-xl font-semibold tracking-tight sm:text-2xl">Trackings</h1>
+				<p class="text-muted-foreground truncate text-sm">{activeCount} still on the way, {totalCount} total</p>
+			</div>
 		</div>
-		<Button onclick={() => (addOpen = true)}>
-			<PlusIcon /> Add
-		</Button>
+		<div class="flex shrink-0 items-center gap-2">
+			<Button onclick={() => (addOpen = true)}>
+				<PlusIcon /> <span class="hidden sm:inline">Add Tracking</span><span class="sm:hidden">Add</span>
+			</Button>
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						<Button {...props} variant="outline" size="icon" aria-label="Menu">
+							<EllipsisIcon />
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end" class="w-40">
+					<DropdownMenu.Item onSelect={() => logoutForm?.requestSubmit()}>
+						<LogOutIcon /> Log out
+					</DropdownMenu.Item>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+			<form bind:this={logoutForm} method="POST" action="/logout" class="hidden"></form>
+		</div>
 	</div>
 
-	<!-- Stat tiles -->
-	<section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+	<!-- Desktop: stat tiles -->
+	<section class="hidden gap-3 md:grid md:grid-cols-4">
 		{#each tiles as tile (tile.status)}
 			<a
 				href={filterHref(tile.status)}
@@ -295,6 +333,31 @@
 		</ul>
 	{/if}
 </div>
+
+<!-- Mobile bottom navigation -->
+<nav
+	class="bg-background/95 border-border/60 fixed inset-x-0 bottom-0 z-30 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.08)] backdrop-blur md:hidden"
+	aria-label="Status"
+>
+	<div class="grid grid-cols-4">
+		{#each tiles as tile (tile.status)}
+			{@const active = data.filter.status === tile.status}
+			<a
+				href={filterHref(tile.status)}
+				aria-current={active ? 'page' : undefined}
+				class={cn(
+					'flex flex-col items-center border-t-2 px-1 py-2 text-center leading-tight transition-colors',
+					active ? NAV_ACTIVE[tile.status] : 'text-muted-foreground border-transparent'
+				)}
+			>
+				<span class={cn('text-base font-semibold tabular-nums', NAV_COUNT[tile.status])}>
+					{data.counts[tile.status]}
+				</span>
+				<span class="text-[11px]">{STATUS_LABEL[tile.status]}</span>
+			</a>
+		{/each}
+	</div>
+</nav>
 
 <AddDialog bind:open={addOpen} />
 <AdvanceDialog bind:tracking={advanceTarget} />

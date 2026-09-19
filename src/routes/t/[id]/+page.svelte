@@ -75,7 +75,7 @@
 	<!-- Header -->
 	<div>
 		<a href="/" class="text-muted-foreground hover:text-foreground mb-3 inline-flex items-center gap-1 text-sm">
-			<ArrowLeftIcon class="size-4" /> All parcels
+			<ArrowLeftIcon class="size-4" /> All trackings
 		</a>
 		<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 			<div class="min-w-0">

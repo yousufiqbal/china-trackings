@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#18181b"/>
+  <!-- parcel: lid + body -->
+  <rect x="104" y="136" width="304" height="72" rx="14" fill="#fafafa"/>
+  <rect x="128" y="208" width="256" height="184" rx="18" fill="#fafafa"/>
+  <!-- tape strip down the middle -->
+  <rect x="232" y="136" width="48" height="256" fill="#18181b" opacity="0.18"/>
+  <!-- label with check -->
+  <rect x="292" y="300" width="70" height="52" rx="10" fill="#18181b"/>
+  <path d="M308 326l12 12 24-24" fill="none" stroke="#fafafa" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
