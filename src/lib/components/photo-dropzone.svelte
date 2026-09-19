@@ -12,10 +12,15 @@
 	import Loader2Icon from '@lucide/svelte/icons/loader-2';
 
 	let {
+		trackingId,
 		photoId,
 		willWarehouse = false
-	}: { photoId: number | null; /** true when uploading will also flip status to warehoused */ willWarehouse?: boolean } =
-		$props();
+	}: {
+		trackingId: number;
+		photoId: number | null;
+		/** true when uploading will also flip status to warehoused */
+		willWarehouse?: boolean;
+	} = $props();
 
 	let dragging = $state(false);
 	let uploading = $state(false);
@@ -31,8 +36,9 @@
 		uploading = true;
 		try {
 			const body = new FormData();
+			body.set('id', String(trackingId));
 			body.set('photo', await resizeImage(file));
-			const res = await fetch('?/photo', {
+			const res = await fetch('/?/photo', {
 				method: 'POST',
 				body,
 				headers: { 'x-sveltekit-action': 'true' }

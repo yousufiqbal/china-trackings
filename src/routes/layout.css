@@ -140,3 +140,24 @@ html,
 body {
 	overflow-x: hidden;
 }
+
+/* Tailwind v4 resets buttons to cursor: default; we want the hand everywhere. */
+@layer base {
+	button:not(:disabled),
+	[role='button']:not([aria-disabled='true']),
+	[role='menuitem'],
+	[role='option'],
+	[role='tab'],
+	label[for],
+	input[type='file'],
+	input[type='file']::file-selector-button,
+	input[type='checkbox'],
+	input[type='radio'],
+	select,
+	summary {
+		cursor: pointer;
+	}
+	button:disabled {
+		cursor: not-allowed;
+	}
+}

@@ -17,7 +17,7 @@ export async function listTrackings(filter: ListFilter = {}): Promise<Tracking[]
 	const args: (string | number)[] = [];
 
 	if (filter.status === 'active' || !filter.status) {
-		where.push(`status IN ('ordered','warehoused')`);
+		where.push(`status IN ('ordered','delivered','warehoused')`);
 	} else if (filter.status !== 'all') {
 		where.push('status = ?');
 		args.push(filter.status);
@@ -40,7 +40,7 @@ export async function countByStatus(): Promise<Record<Status, number>> {
 	const rows = await query<{ status: Status; n: number }>(
 		'SELECT status, COUNT(*) AS n FROM trackings GROUP BY status'
 	);
-	const out: Record<Status, number> = { ordered: 0, warehoused: 0, delivered: 0, lost: 0 };
+	const out: Record<Status, number> = { ordered: 0, delivered: 0, warehoused: 0, received: 0, lost: 0 };
 	for (const r of rows) out[r.status] = Number(r.n);
 	return out;
 }
@@ -143,19 +143,32 @@ export async function setStatus(
 	const sets: string[] = ['status = ?', 'updated_at = ?'];
 	const args: (string | number | null)[] = [to, Date.now()];
 
-	if (to === 'warehoused') {
-		sets.push('warehoused_at = ?');
-		args.push(at);
-	} else if (to === 'delivered') {
-		sets.push('delivered_at = ?');
-		args.push(at);
-		if (!current.warehoused_at) {
-			sets.push('warehoused_at = ?');
-			args.push(at);
+	// Stamp the date for the step reached; earlier steps that were skipped get
+	// the same date so the timeline stays consistent. Moving backwards clears
+	// the later steps.
+	const ORDER: Status[] = ['ordered', 'delivered', 'warehoused', 'received'];
+	const idx = ORDER.indexOf(to);
+	if (idx >= 0) {
+		const stamped = {
+			delivered: current.delivered_at,
+			warehoused: current.warehoused_at,
+			received: current.received_at
+		} as const;
+		const movingBack = ORDER.indexOf(current.status) > idx;
+		for (let i = 1; i < ORDER.length; i++) {
+			const step = ORDER[i] as keyof typeof stamped;
+			const col = `${step}_at`;
+			if (i > idx) {
+				sets.push(`${col} = NULL`);
+			} else if (i === idx && !(movingBack && stamped[step] && opts.at === undefined)) {
+				// Reopening keeps the original date unless one was given explicitly.
+				sets.push(`${col} = ?`);
+				args.push(at);
+			} else if (i < idx && !stamped[step]) {
+				sets.push(`${col} = ?`);
+				args.push(at);
+			}
 		}
-	} else if (to === 'ordered') {
-		// Reopening: clear downstream timestamps.
-		sets.push('warehoused_at = NULL', 'delivered_at = NULL');
 	}
 
 	if (opts.receipt_ref !== undefined) {
@@ -194,8 +207,9 @@ export interface UpdateFields {
 	receipt_photo_id?: number | null;
 	notes?: string | null;
 	ordered_at?: number;
-	warehoused_at?: number | null;
 	delivered_at?: number | null;
+	warehoused_at?: number | null;
+	received_at?: number | null;
 }
 
 /** Edit descriptive fields. Returns an error string on duplicate tracking number. */
@@ -221,8 +235,9 @@ export async function updateTracking(id: number, fields: UpdateFields): Promise<
 		'receipt_photo_id',
 		'notes',
 		'ordered_at',
+		'delivered_at',
 		'warehoused_at',
-		'delivered_at'
+		'received_at'
 	] as const) {
 		if (fields[key] !== undefined) {
 			sets.push(`${key} = ?`);

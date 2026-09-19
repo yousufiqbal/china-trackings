@@ -51,7 +51,7 @@
 		{#if tracking}
 			<form
 				method="POST"
-				action="?/comment"
+				action="/?/comment"
 				class="grid gap-4"
 				use:enhance={() => {
 					saving = true;

@@ -9,7 +9,7 @@ import {
 	setStatus
 } from '$lib/server/trackings';
 import { deletePhoto } from '$lib/server/photos';
-import { handleAdvance, handleComment, handleSave } from '$lib/server/advance';
+import { attachPhoto, handleAdvance, handleComment, handleSave } from '$lib/server/advance';
 import { isStatus, normalizeTrackingNo, parseDateInput, type Status } from '$lib/trackings';
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -47,9 +47,36 @@ export const actions: Actions = {
 		return { action: 'add', tracking_no: number };
 	},
 
-	/** Advance to the next status on the happy path (ordered -> warehoused -> delivered). */
+	/** Advance to the next status on the happy path (ordered -> delivered -> warehoused -> received). */
 	advance: async ({ request }) => handleAdvance(await request.formData()),
 	comment: async ({ request }) => handleComment(await request.formData()),
+
+	/** Drag-and-drop / quick upload of the receipt photo. Moves ordered/delivered -> warehoused. */
+	photo: async ({ request }) => {
+		const form = await request.formData();
+		const id = idFrom(form);
+		if (!id) return fail(400, { error: 'Bad id' });
+		try {
+			const photoId = await attachPhoto(id, form.get('photo') as File | null);
+			if (!photoId) return fail(400, { error: 'No photo received' });
+			return { saved: true, photoId };
+		} catch (e) {
+			return fail(400, { error: (e as Error).message });
+		}
+	},
+
+	/** Manual status override (corrections). */
+	status: async ({ request }) => {
+		const form = await request.formData();
+		const id = idFrom(form);
+		if (!id) return fail(400, { error: 'Bad id' });
+		const to = form.get('status');
+		if (!isStatus(to)) return fail(400, { error: 'Bad status' });
+		const note = String(form.get('note') ?? '').trim() || null;
+		const t = await setStatus(id, to, { note });
+		if (!t) return fail(404, { error: 'Not found' });
+		return { saved: true };
+	},
 	save: async ({ request }) => {
 		const form = await request.formData();
 		const id = idFrom(form);
@@ -66,16 +93,19 @@ export const actions: Actions = {
 		return { action: 'lost', tracking_no: t.tracking_no };
 	},
 
-	/** Bring a lost/delivered parcel back to the active list. */
+	/** Bring a lost/received parcel back to the active list, at the furthest step it had reached. */
 	reopen: async ({ request }) => {
 		const form = await request.formData();
 		const id = idFrom(form);
 		if (!id) return fail(400, { action: 'reopen', error: 'Bad id' });
 		const current = await getTracking(id);
 		if (!current) return fail(404, { action: 'reopen', error: 'Not found' });
-		// Delivered goes back one step; lost goes back to wherever it was before.
 		const to: Status =
-			current.status === 'delivered' || current.warehoused_at ? 'warehoused' : 'ordered';
+			current.status === 'received' || current.warehoused_at
+				? 'warehoused'
+				: current.delivered_at
+					? 'delivered'
+					: 'ordered';
 		const t = await setStatus(id, to, { note: 'Reopened' });
 		return { action: 'reopen', tracking_no: t?.tracking_no };
 	},

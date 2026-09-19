@@ -1,35 +1,48 @@
 // Shared (client + server) definitions for tracking statuses.
 
-export const STATUSES = ['ordered', 'warehoused', 'delivered', 'lost'] as const;
+export const STATUSES = ['ordered', 'delivered', 'warehoused', 'received', 'lost'] as const;
 export type Status = (typeof STATUSES)[number];
 
 export const STATUS_LABEL: Record<Status, string> = {
 	ordered: 'Ordered',
-	warehoused: 'Warehoused',
 	delivered: 'Delivered',
+	warehoused: 'Warehoused',
+	received: 'Received',
 	lost: 'Lost'
 };
 
 export const STATUS_HINT: Record<Status, string> = {
 	ordered: 'Supplier shipped, on the way to the China warehouse',
-	warehoused: 'Warehouse confirmed receipt, waiting to be sent to you',
-	delivered: 'Arrived at your door',
+	delivered: 'Courier delivered to the warehouse, receipt not issued yet',
+	warehoused: 'Warehouse issued the receipt, waiting to be sent to you',
+	received: 'Received by you at home',
 	lost: 'Never arrived'
 };
 
-/** The happy-path next step for each status. */
+/** Happy path: ordered -> delivered -> warehoused -> received. */
 export const NEXT_STATUS: Partial<Record<Status, Status>> = {
-	ordered: 'warehoused',
-	warehoused: 'delivered'
+	ordered: 'delivered',
+	delivered: 'warehoused',
+	warehoused: 'received'
 };
 
-export const ACTIVE_STATUSES: Status[] = ['ordered', 'warehoused'];
+/** Statuses that still need something to happen. */
+export const ACTIVE_STATUSES: Status[] = ['ordered', 'delivered', 'warehoused'];
 
 /** Days a parcel may sit in a status before it is flagged as stale. */
 export const STALE_AFTER_DAYS: Partial<Record<Status, number>> = {
 	ordered: 14,
+	delivered: 5,
 	warehoused: 21
 };
+
+/** Which timestamp column records entry into each happy-path status. */
+export const STATUS_DATE_FIELD = {
+	ordered: 'ordered_at',
+	delivered: 'delivered_at',
+	warehoused: 'warehoused_at',
+	received: 'received_at'
+} as const;
 
 export interface Tracking {
 	id: number;
@@ -41,8 +54,9 @@ export interface Tracking {
 	receipt_photo_id: number | null;
 	notes: string | null;
 	ordered_at: number;
-	warehoused_at: number | null;
 	delivered_at: number | null;
+	warehoused_at: number | null;
+	received_at: number | null;
 	created_at: number;
 	updated_at: number;
 }
@@ -68,10 +82,12 @@ export function normalizeTrackingNo(raw: string): string {
 /** Timestamp at which the tracking entered its current status. */
 export function statusSince(t: Tracking): number {
 	switch (t.status) {
-		case 'warehoused':
-			return t.warehoused_at ?? t.updated_at;
 		case 'delivered':
 			return t.delivered_at ?? t.updated_at;
+		case 'warehoused':
+			return t.warehoused_at ?? t.updated_at;
+		case 'received':
+			return t.received_at ?? t.updated_at;
 		case 'lost':
 			return t.updated_at;
 		default:

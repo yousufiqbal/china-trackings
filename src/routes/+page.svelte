@@ -9,9 +9,11 @@
 	import AdvanceDialog from '$lib/components/advance-dialog.svelte';
 	import CommentDialog from '$lib/components/comment-dialog.svelte';
 	import EditDialog from '$lib/components/edit-dialog.svelte';
+	import DetailDialog from '$lib/components/detail-dialog.svelte';
 	import RowActions from '$lib/components/row-actions.svelte';
 	import {
 		STATUS_LABEL,
+		NEXT_STATUS,
 		STALE_AFTER_DAYS,
 		daysInStatus,
 		formatDate,
@@ -32,6 +34,7 @@
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import PackageXIcon from '@lucide/svelte/icons/package-x';
 	import { toast } from 'svelte-sonner';
 
 	let { data } = $props();
@@ -39,7 +42,12 @@
 	let advanceTarget = $state<Tracking | null>(null);
 	let commentTarget = $state<Tracking | null>(null);
 	let editTarget = $state<Tracking | null>(null);
-	let showReceipt = $derived(data.filter.status !== 'ordered' || !!data.filter.q);
+	let viewId = $state<number | null>(null);
+	// Always render the freshest copy so nested actions (advance, photo) update the modal in place.
+	let viewTracking = $derived(viewId === null ? null : (data.trackings.find((t) => t.id === viewId) ?? null));
+	let showReceipt = $derived(
+		(data.filter.status !== 'ordered' && data.filter.status !== 'delivered') || !!data.filter.q
+	);
 	let addOpen = $state(false);
 	let logoutForm = $state<HTMLFormElement | null>(null);
 	// svelte-ignore state_referenced_locally
@@ -47,7 +55,7 @@
 
 
 	let staleCount = $derived(data.trackings.filter((t) => isStale(t, data.now)).length);
-	let activeCount = $derived(data.counts.ordered + data.counts.warehoused);
+	let activeCount = $derived(data.counts.ordered + data.counts.delivered + data.counts.warehoused);
 
 	function filterHref(status: string) {
 		const p = new URLSearchParams();
@@ -73,8 +81,9 @@
 
 	const DATE_HEAD: Record<Status, string> = {
 		ordered: 'Ordered on',
-		warehoused: 'Warehoused on',
 		delivered: 'Delivered on',
+		warehoused: 'Warehoused on',
+		received: 'Received on',
 		lost: 'Lost on'
 	};
 	let dateHead = $derived(data.filter.q ? 'Status date' : DATE_HEAD[data.filter.status as Status]);
@@ -82,14 +91,16 @@
 	// Same hues as StatusBadge, for the mobile bottom nav.
 	const NAV_COUNT: Record<Status, string> = {
 		ordered: 'text-blue-600 dark:text-blue-300',
+		delivered: 'text-violet-600 dark:text-violet-300',
 		warehoused: 'text-amber-600 dark:text-amber-300',
-		delivered: 'text-emerald-600 dark:text-emerald-300',
+		received: 'text-emerald-600 dark:text-emerald-300',
 		lost: 'text-red-600 dark:text-red-300'
 	};
 	const NAV_ACTIVE: Record<Status, string> = {
 		ordered: 'border-blue-500 bg-blue-500/10 text-blue-800 dark:text-blue-200',
+		delivered: 'border-violet-500 bg-violet-500/10 text-violet-800 dark:text-violet-200',
 		warehoused: 'border-amber-500 bg-amber-500/10 text-amber-800 dark:text-amber-200',
-		delivered: 'border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200',
+		received: 'border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200',
 		lost: 'border-red-500 bg-red-500/10 text-red-800 dark:text-red-200'
 	};
 
@@ -109,9 +120,9 @@
 
 	const tiles: { status: Status; hint: string }[] = [
 		{ status: 'ordered', hint: 'in transit to warehouse' },
-		{ status: 'warehoused', hint: 'waiting at warehouse' },
-		{ status: 'delivered', hint: 'completed' },
-		{ status: 'lost', hint: 'never arrived' }
+		{ status: 'delivered', hint: 'at warehouse, no receipt yet' },
+		{ status: 'warehoused', hint: 'receipt issued' },
+		{ status: 'received', hint: 'at home, done' }
 	];
 </script>
 
@@ -138,7 +149,12 @@
 						</Button>
 					{/snippet}
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-40">
+				<DropdownMenu.Content align="end" class="w-44">
+					<DropdownMenu.Item onSelect={() => goto(filterHref('lost'))}>
+						<PackageXIcon /> Lost parcels
+						<span class="text-muted-foreground ml-auto tabular-nums">{data.counts.lost}</span>
+					</DropdownMenu.Item>
+					<DropdownMenu.Separator />
 					<DropdownMenu.Item onSelect={() => logoutForm?.requestSubmit()}>
 						<LogOutIcon /> Log out
 					</DropdownMenu.Item>
@@ -188,6 +204,15 @@
 			{/if}
 		</form>
 
+		{#if data.filter.status === 'lost' && !data.filter.q}
+			<div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200">
+				<span>Showing <strong>lost</strong> parcels</span>
+				<Button variant="outline" size="sm" onclick={() => goto('/')}>
+					<ArrowLeftIcon /> Back to Ordered
+				</Button>
+			</div>
+		{/if}
+
 		{#if data.filter.q}
 			<div class="bg-muted/60 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm">
 				<span>
@@ -207,7 +232,8 @@
 				<TriangleAlertIcon class="mt-0.5 size-4 shrink-0" />
 				<span>
 					<strong>{staleCount}</strong> parcel{staleCount === 1 ? '' : 's'} stuck too long — ordered &gt;
-					{STALE_AFTER_DAYS.ordered}d or warehoused &gt; {STALE_AFTER_DAYS.warehoused}d. Chase supplier / warehouse.
+					{STALE_AFTER_DAYS.ordered}d, delivered without receipt &gt; {STALE_AFTER_DAYS.delivered}d, or
+					warehoused &gt; {STALE_AFTER_DAYS.warehoused}d. Chase supplier / warehouse.
 				</span>
 			</div>
 		{/if}
@@ -238,7 +264,9 @@
 						<Table.Row class={cn(stale && 'bg-amber-500/5')}>
 							<Table.Cell class="font-mono text-[13px]">
 								<div class="group/no flex items-center gap-1">
-									<a href="/t/{t.id}" class="hover:underline">{t.tracking_no}</a>
+									<button type="button" class="hover:underline" onclick={() => (viewId = t.id)}>
+										{t.tracking_no}
+									</button>
 									<button
 										type="button"
 										class="text-muted-foreground hover:text-foreground rounded p-1 opacity-0 transition-opacity group-hover/no:opacity-100 focus-visible:opacity-100"
@@ -308,9 +336,13 @@
 						<div class="flex min-w-0 gap-2">
 							<div class="min-w-0">
 							<div class="flex items-start gap-1">
-								<a href="/t/{t.id}" class="font-mono text-sm font-medium break-all">
+								<button
+									type="button"
+									class="text-left font-mono text-sm font-medium break-all"
+									onclick={() => (viewId = t.id)}
+								>
 									{t.tracking_no}
-								</a>
+								</button>
 								<button
 									type="button"
 									class="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5"
@@ -350,9 +382,9 @@
 								</button>
 							{/if}
 						</div>
-						{#if t.status === 'ordered' || t.status === 'warehoused'}
+						{#if NEXT_STATUS[t.status]}
 							<Button size="sm" variant="outline" onclick={() => (advanceTarget = t)}>
-								{t.status === 'ordered' ? 'Warehoused' : 'Delivered'}
+								{STATUS_LABEL[NEXT_STATUS[t.status]!]}
 							</Button>
 						{/if}
 					</div>
@@ -388,6 +420,11 @@
 </nav>
 
 <AddDialog bind:open={addOpen} />
+{#if viewTracking}
+	{#key viewTracking.id}
+		<DetailDialog tracking={viewTracking} now={data.now} open={true} onClose={() => (viewId = null)} />
+	{/key}
+{/if}
 <AdvanceDialog bind:tracking={advanceTarget} />
 <CommentDialog bind:tracking={commentTarget} />
 {#if editTarget}

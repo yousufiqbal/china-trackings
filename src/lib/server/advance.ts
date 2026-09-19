@@ -34,8 +34,8 @@ export async function handleAdvance(form: FormData) {
 }
 
 /**
- * Attach a receipt photo to a tracking. A receipt means the warehouse has the
- * parcel, so an "ordered" tracking is moved to "warehoused" at the same time.
+ * Attach a receipt photo to a tracking. A receipt means the warehouse has
+ * acknowledged the parcel, so anything before "warehoused" is moved there.
  * Returns the new photo id, or throws with a user-facing message.
  */
 export async function attachPhoto(id: number, file: File | null | undefined): Promise<number | null> {
@@ -44,7 +44,7 @@ export async function attachPhoto(id: number, file: File | null | undefined): Pr
 	const photoId = await savePhoto(file);
 	if (!photoId) return null;
 
-	if (t.status === 'ordered') {
+	if (t.status === 'ordered' || t.status === 'delivered') {
 		await setStatus(id, 'warehoused', { receipt_photo_id: photoId, note: 'Receipt photo added' });
 	} else {
 		await updateTracking(id, { receipt_photo_id: photoId });
@@ -98,8 +98,9 @@ export async function handleSave(id: number, form: FormData) {
 		notes: String(form.get('notes') ?? '').trim() || null,
 		receipt_photo_id,
 		ordered_at: dateFrom(form.get('ordered_at'), current.ordered_at) ?? undefined,
+		delivered_at: dateFrom(form.get('delivered_at'), current.delivered_at),
 		warehoused_at: dateFrom(form.get('warehoused_at'), current.warehoused_at),
-		delivered_at: dateFrom(form.get('delivered_at'), current.delivered_at)
+		received_at: dateFrom(form.get('received_at'), current.received_at)
 	});
 	if (err) {
 		await deletePhoto(receipt_photo_id);
@@ -107,8 +108,8 @@ export async function handleSave(id: number, form: FormData) {
 	}
 	// Old photo is unreferenced now that the update succeeded.
 	if (receipt_photo_id !== undefined) await deletePhoto(current.receipt_photo_id);
-	// A receipt photo means the warehouse has it.
-	if (receipt_photo_id && current.status === 'ordered') {
+	// A receipt photo means the warehouse acknowledged it.
+	if (receipt_photo_id && (current.status === 'ordered' || current.status === 'delivered')) {
 		await setStatus(id, 'warehoused', { note: 'Receipt photo added' });
 	}
 	return { saved: true };

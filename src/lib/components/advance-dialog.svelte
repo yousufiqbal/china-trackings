@@ -7,7 +7,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import FileDrop from '$lib/components/file-drop.svelte';
 	import { resizeImage } from '$lib/resize-image';
-	import { NEXT_STATUS, STATUS_LABEL, todayInput, type Tracking } from '$lib/trackings';
+	import { NEXT_STATUS, STATUS_LABEL, todayInput, type Status, type Tracking } from '$lib/trackings';
 
 	let {
 		tracking = $bindable(null),
@@ -18,6 +18,21 @@
 	let photo = $state<File | null>(null);
 	let open = $derived(tracking !== null);
 	let next = $derived(tracking ? NEXT_STATUS[tracking.status] : undefined);
+
+	const TITLE: Partial<Record<Status, string>> = {
+		delivered: 'Delivered to warehouse',
+		warehoused: 'Warehouse issued receipt',
+		received: 'Received at home'
+	};
+	const DATE_LABEL: Partial<Record<Status, string>> = {
+		delivered: 'Delivered on',
+		warehoused: 'Receipt date',
+		received: 'Received on'
+	};
+	const HELP: Partial<Record<Status, string>> = {
+		delivered: 'Courier shows it delivered to the warehouse, but the warehouse has not issued a receipt yet.',
+		received: 'Confirms the parcel is with you at home and closes the tracking.'
+	};
 </script>
 
 <Dialog.Root
@@ -33,7 +48,7 @@
 		{#if tracking && next}
 			<form
 				method="POST"
-				action="?/advance"
+				action="/?/advance"
 				enctype="multipart/form-data"
 				class="grid gap-4"
 				use:enhance={async ({ formData }) => {
@@ -55,16 +70,14 @@
 			>
 				<input type="hidden" name="id" value={tracking.id} />
 				<Dialog.Header>
-					<Dialog.Title>
-						{next === 'warehoused' ? 'Received at warehouse' : 'Delivered to you'}
-					</Dialog.Title>
+					<Dialog.Title>{TITLE[next]}</Dialog.Title>
 					<Dialog.Description>
 						<span class="font-mono">{tracking.tracking_no}</span>
 					</Dialog.Description>
 				</Dialog.Header>
 
 				<div class="grid gap-2">
-					<Label for="adv-at">{next === 'warehoused' ? 'Received on' : 'Delivered on'}</Label>
+					<Label for="adv-at">{DATE_LABEL[next]}</Label>
 					<Input id="adv-at" name="at" type="date" value={todayInput()} max={todayInput()} required />
 				</div>
 
@@ -74,13 +87,13 @@
 						<FileDrop bind:file={photo} />
 					</div>
 				{:else}
-					<p class="text-muted-foreground text-sm">Confirms the parcel arrived at your house and closes the tracking.</p>
+					<p class="text-muted-foreground text-sm">{HELP[next]}</p>
 				{/if}
 
 				<Dialog.Footer>
 					<Button type="button" variant="outline" onclick={() => (tracking = null)}>Cancel</Button>
 					<Button type="submit" disabled={submitting}>
-						{submitting ? 'Saving…' : next === 'warehoused' ? 'Mark warehoused' : 'Mark delivered'}
+						{submitting ? 'Saving…' : `Mark ${STATUS_LABEL[next].toLowerCase()}`}
 					</Button>
 				</Dialog.Footer>
 			</form>

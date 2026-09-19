@@ -7,12 +7,13 @@ Small private panel to track parcels from Chinese suppliers → China warehouse 
 | Status | Meaning |
 |---|---|
 | **Ordered** | Supplier gave you a tracking number; parcel moving to the warehouse |
-| **Warehoused** | Warehouse confirmed receipt (store receipt no. + photo) |
-| **Delivered** | Arrived at your house — done |
-| **Lost** | Never showed up (kept for the record) |
+| **Delivered** | Courier delivered to the warehouse, but no receipt issued yet |
+| **Warehoused** | Warehouse issued the receipt (photo upload moves a parcel here) |
+| **Received** | Arrived at your house, done |
+| **Lost** | Never showed up (kept for the record, hidden behind the menu) |
 
-Parcels sitting in *Ordered* > 14 days or *Warehoused* > 21 days are flagged as stale.
-Change the limits in `src/lib/trackings.ts` (`STALE_AFTER_DAYS`).
+Parcels sitting in *Ordered* > 14 days, *Delivered* > 5 days or *Warehoused* > 21 days are
+flagged as stale. Change the limits in `src/lib/trackings.ts` (`STALE_AFTER_DAYS`).
 
 ## Setup
 
