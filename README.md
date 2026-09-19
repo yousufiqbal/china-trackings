@@ -37,9 +37,9 @@ before upload, so a typical receipt is 100-400 KB.
 
 ## Production
 
-```sh
-npm run build
-node build            # adapter-node, listens on PORT (default 3000)
-```
+Deploys to Vercel (adapter-vercel). Import the repo, framework preset "SvelteKit", and add
+these Environment Variables in the Vercel project settings:
 
-Set `NODE_ENV=production` so the session cookie is marked `Secure` (requires HTTPS).
+`ADMIN_USER`, `ADMIN_PASS`, `SESSION_SECRET`, `DATABASE_URL`, `DATABASE_AUTH_TOKEN`
+
+Photos live in Turso, so nothing is written to disk.
