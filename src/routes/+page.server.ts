@@ -9,8 +9,8 @@ import {
 	setStatus
 } from '$lib/server/trackings';
 import { deletePhoto } from '$lib/server/photos';
-import { handleAdvance, handleComment } from '$lib/server/advance';
-import { isStatus, parseDateInput, type Status } from '$lib/trackings';
+import { handleAdvance, handleComment, handleSave } from '$lib/server/advance';
+import { isStatus, normalizeTrackingNo, parseDateInput, type Status } from '$lib/trackings';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const s = url.searchParams.get('status');
@@ -29,20 +29,29 @@ function idFrom(form: FormData): number | null {
 export const actions: Actions = {
 	add: async ({ request }) => {
 		const form = await request.formData();
-		const raw = String(form.get('numbers') ?? '');
+		const number = normalizeTrackingNo(String(form.get('number') ?? ''));
 		const comment = String(form.get('comment') ?? '').trim().slice(0, 2000);
-
-		const numbers = raw.split(/[\s,;]+/).filter(Boolean);
-		if (!numbers.length) return fail(400, { action: 'add', error: 'Paste at least one tracking number' });
+		if (!number) return fail(400, { action: 'add', error: 'Enter a tracking number' });
+		if (/\s/.test(String(form.get('number')).trim())) {
+			return fail(400, { action: 'add', error: 'One tracking number at a time' });
+		}
 
 		const ordered_at = parseDateInput(form.get('ordered_at'));
-		const result = await addTrackings(numbers, { notes: comment, ordered_at });
-		return { action: 'add', ...result };
+		const result = await addTrackings([number], { notes: comment, ordered_at });
+		if (result.duplicates.length) return fail(409, { action: 'add', error: `${number} already exists` });
+		if (result.invalid.length) return fail(400, { action: 'add', error: 'Tracking number must be 4-64 characters' });
+		return { action: 'add', tracking_no: number };
 	},
 
 	/** Advance to the next status on the happy path (ordered -> warehoused -> delivered). */
 	advance: async ({ request }) => handleAdvance(await request.formData()),
 	comment: async ({ request }) => handleComment(await request.formData()),
+	save: async ({ request }) => {
+		const form = await request.formData();
+		const id = idFrom(form);
+		if (!id) return fail(400, { error: 'Bad id' });
+		return handleSave(id, form);
+	},
 
 	lost: async ({ request }) => {
 		const form = await request.formData();

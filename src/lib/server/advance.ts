@@ -63,3 +63,53 @@ export async function handleComment(form: FormData) {
 	await updateTracking(id, { notes });
 	return { action: 'comment' as const, tracking_no: t.tracking_no };
 }
+
+/** <input type="date"> gives YYYY-MM-DD; keep the original time-of-day if the day is unchanged. */
+function dateFrom(value: FormDataEntryValue | null, previous: number | null): number | null | undefined {
+	if (value === null) return undefined;
+	const s = String(value).trim();
+	if (!s) return null;
+	const [y, m, d] = s.split('-').map(Number);
+	if (!y || !m || !d) return undefined;
+	const prev = previous ? new Date(previous) : null;
+	if (prev && prev.getFullYear() === y && prev.getMonth() === m - 1 && prev.getDate() === d) {
+		return previous;
+	}
+	return new Date(y, m - 1, d, 12).getTime();
+}
+
+/** Shared form-action body for the Edit dialog. */
+export async function handleSave(id: number, form: FormData) {
+	const current = await getTracking(id);
+	if (!current) return fail(404, { error: 'Not found' });
+
+	// undefined = leave photo alone, null = remove it, number = replace it
+	let receipt_photo_id: number | null | undefined;
+	try {
+		receipt_photo_id = (await savePhoto(form.get('photo') as File | null)) ?? undefined;
+	} catch (e) {
+		return fail(400, { error: (e as Error).message });
+	}
+	if (receipt_photo_id === undefined && form.get('remove_photo') === 'on') receipt_photo_id = null;
+
+	const err = await updateTracking(id, {
+		tracking_no: String(form.get('tracking_no') ?? ''),
+		receipt_ref: String(form.get('receipt_ref') ?? '').trim() || null,
+		notes: String(form.get('notes') ?? '').trim() || null,
+		receipt_photo_id,
+		ordered_at: dateFrom(form.get('ordered_at'), current.ordered_at) ?? undefined,
+		warehoused_at: dateFrom(form.get('warehoused_at'), current.warehoused_at),
+		delivered_at: dateFrom(form.get('delivered_at'), current.delivered_at)
+	});
+	if (err) {
+		await deletePhoto(receipt_photo_id);
+		return fail(400, { error: err });
+	}
+	// Old photo is unreferenced now that the update succeeded.
+	if (receipt_photo_id !== undefined) await deletePhoto(current.receipt_photo_id);
+	// A receipt photo means the warehouse has it.
+	if (receipt_photo_id && current.status === 'ordered') {
+		await setStatus(id, 'warehoused', { note: 'Receipt photo added' });
+	}
+	return { saved: true };
+}

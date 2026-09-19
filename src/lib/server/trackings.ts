@@ -32,8 +32,7 @@ export async function listTrackings(filter: ListFilter = {}): Promise<Tracking[]
 	}
 
 	const sql = `SELECT * FROM trackings ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-		ORDER BY CASE status WHEN 'ordered' THEN 0 WHEN 'warehoused' THEN 1 WHEN 'lost' THEN 2 ELSE 3 END,
-		updated_at DESC`;
+		ORDER BY ordered_at DESC, id DESC`;
 	return query<Tracking>(sql, args);
 }
 

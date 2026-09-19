@@ -7,6 +7,7 @@
 	import AddDialog from '$lib/components/add-dialog.svelte';
 	import AdvanceDialog from '$lib/components/advance-dialog.svelte';
 	import CommentDialog from '$lib/components/comment-dialog.svelte';
+	import EditDialog from '$lib/components/edit-dialog.svelte';
 	import RowActions from '$lib/components/row-actions.svelte';
 	import {
 		STATUS_LABEL,
@@ -14,6 +15,7 @@
 		daysInStatus,
 		formatDate,
 		isStale,
+		statusSince,
 		type Status,
 		type Tracking
 	} from '$lib/trackings';
@@ -24,11 +26,14 @@
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import ImageIcon from '@lucide/svelte/icons/image';
 	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import { toast } from 'svelte-sonner';
 
 	let { data } = $props();
 
 	let advanceTarget = $state<Tracking | null>(null);
 	let commentTarget = $state<Tracking | null>(null);
+	let editTarget = $state<Tracking | null>(null);
 	let showReceipt = $derived(data.filter.status !== 'ordered');
 	let addOpen = $state(false);
 	// svelte-ignore state_referenced_locally
@@ -56,9 +61,26 @@
 		goto(s ? `/?${s}` : '/', { keepFocus: true });
 	}
 
+	const DATE_HEAD: Record<Status, string> = {
+		ordered: 'Ordered on',
+		warehoused: 'Warehoused on',
+		delivered: 'Delivered on',
+		lost: 'Lost on'
+	};
+	let dateHead = $derived(DATE_HEAD[data.filter.status as Status]);
+
+	async function copyNo(no: string) {
+		try {
+			await navigator.clipboard.writeText(no);
+			toast.success('Copied ' + no);
+		} catch {
+			toast.error('Could not copy');
+		}
+	}
+
 	function ageLabel(t: Tracking) {
 		const d = daysInStatus(t, data.now);
-		return d === 0 ? 'today' : d === 1 ? '1 day' : `${d} days`;
+		return d === 0 ? 'today' : d === 1 ? '1 day ago' : `${d} days ago`;
 	}
 
 	const tiles: { status: Status; hint: string }[] = [
@@ -138,9 +160,9 @@
 					<Table.Row>
 						<Table.Head>Tracking no.</Table.Head>
 						<Table.Head>Status</Table.Head>
+						<Table.Head>{dateHead}</Table.Head>
 						{#if showReceipt}<Table.Head>Receipt</Table.Head>{/if}
 						<Table.Head>Comment</Table.Head>
-						<Table.Head class="text-right">In status</Table.Head>
 						<Table.Head class="text-right">Actions</Table.Head>
 					</Table.Row>
 				</Table.Header>
@@ -149,9 +171,27 @@
 						{@const stale = isStale(t, data.now)}
 						<Table.Row class={cn(stale && 'bg-amber-500/5')}>
 							<Table.Cell class="font-mono text-[13px]">
-								<a href="/t/{t.id}" class="hover:underline">{t.tracking_no}</a>
+								<div class="group/no flex items-center gap-1">
+									<a href="/t/{t.id}" class="hover:underline">{t.tracking_no}</a>
+									<button
+										type="button"
+										class="text-muted-foreground hover:text-foreground rounded p-1 opacity-0 transition-opacity group-hover/no:opacity-100 focus-visible:opacity-100"
+										aria-label="Copy tracking number"
+										title="Copy"
+										onclick={() => copyNo(t.tracking_no)}
+									>
+										<CopyIcon class="size-3.5" />
+									</button>
+								</div>
 							</Table.Cell>
 							<Table.Cell><StatusBadge status={t.status} /></Table.Cell>
+							<Table.Cell class="text-sm tabular-nums whitespace-nowrap">
+								<span class={cn(stale && 'font-medium text-amber-700 dark:text-amber-300')}>
+									{#if stale}<TriangleAlertIcon class="mr-1 inline size-3" />{/if}
+									{formatDate(statusSince(t))}
+								</span>
+								<div class="text-muted-foreground text-xs">{ageLabel(t)}</div>
+							</Table.Cell>
 							{#if showReceipt}
 							<Table.Cell class="text-muted-foreground text-xs">
 								<div class="flex items-center gap-1.5">
@@ -184,15 +224,8 @@
 									<span class="line-clamp-2 min-w-0 break-words">{t.notes || 'Add comment'}</span>
 								</button>
 							</Table.Cell>
-							<Table.Cell class="text-right text-xs tabular-nums">
-								<span class={cn(stale && 'font-medium text-amber-700 dark:text-amber-300')}>
-									{#if stale}<TriangleAlertIcon class="mr-1 inline size-3" />{/if}
-									{ageLabel(t)}
-								</span>
-								<div class="text-muted-foreground">{formatDate(t.ordered_at)}</div>
-							</Table.Cell>
 							<Table.Cell>
-								<RowActions tracking={t} onAdvance={(x) => (advanceTarget = x)} />
+								<RowActions tracking={t} onAdvance={(x) => (advanceTarget = x)} onEdit={(x) => (editTarget = x)} />
 							</Table.Cell>
 						</Table.Row>
 					{/each}
@@ -208,9 +241,19 @@
 					<div class="flex items-start justify-between gap-3">
 						<div class="flex min-w-0 gap-2">
 							<div class="min-w-0">
-							<a href="/t/{t.id}" class="block font-mono text-sm font-medium break-all">
-								{t.tracking_no}
-							</a>
+							<div class="flex items-start gap-1">
+								<a href="/t/{t.id}" class="font-mono text-sm font-medium break-all">
+									{t.tracking_no}
+								</a>
+								<button
+									type="button"
+									class="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5"
+									aria-label="Copy tracking number"
+									onclick={() => copyNo(t.tracking_no)}
+								>
+									<CopyIcon class="size-3.5" />
+								</button>
+							</div>
 							<button
 								type="button"
 								class={cn('mt-0.5 flex items-start gap-1 text-left text-xs', t.notes ? 'text-foreground/80' : 'text-muted-foreground')}
@@ -221,14 +264,14 @@
 							</button>
 							</div>
 						</div>
-						<RowActions tracking={t} onAdvance={(x) => (advanceTarget = x)} showPrimary={false} />
+						<RowActions tracking={t} onAdvance={(x) => (advanceTarget = x)} onEdit={(x) => (editTarget = x)} showPrimary={false} />
 					</div>
 					<div class="mt-3 flex flex-wrap items-center justify-between gap-2">
 						<div class="flex min-w-0 flex-wrap items-center gap-2">
 							<StatusBadge status={t.status} />
 							<span class={cn('text-xs tabular-nums', stale ? 'font-medium text-amber-700 dark:text-amber-300' : 'text-muted-foreground')}>
 								{#if stale}<TriangleAlertIcon class="mr-0.5 inline size-3" />{/if}
-								{ageLabel(t)}
+								{formatDate(statusSince(t))}
 							</span>
 							{#if t.receipt_photo_id}
 								<button
@@ -256,3 +299,13 @@
 <AddDialog bind:open={addOpen} />
 <AdvanceDialog bind:tracking={advanceTarget} />
 <CommentDialog bind:tracking={commentTarget} />
+{#if editTarget}
+	{#key editTarget.id}
+		<EditDialog
+			open={true}
+			tracking={editTarget}
+			onDone={() => (editTarget = null)}
+			onClose={() => (editTarget = null)}
+		/>
+	{/key}
+{/if}

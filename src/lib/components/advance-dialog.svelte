@@ -5,7 +5,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { shrinkPhotoField } from '$lib/resize-image';
+	import FileDrop from '$lib/components/file-drop.svelte';
+	import { resizeImage } from '$lib/resize-image';
 	import { NEXT_STATUS, STATUS_LABEL, todayInput, type Tracking } from '$lib/trackings';
 
 	let {
@@ -14,6 +15,7 @@
 	}: { tracking: Tracking | null; onDone?: () => void } = $props();
 
 	let submitting = $state(false);
+	let photo = $state<File | null>(null);
 	let open = $derived(tracking !== null);
 	let next = $derived(tracking ? NEXT_STATUS[tracking.status] : undefined);
 </script>
@@ -21,7 +23,10 @@
 <Dialog.Root
 	{open}
 	onOpenChange={(v) => {
-		if (!v) tracking = null;
+		if (!v) {
+			tracking = null;
+			photo = null;
+		}
 	}}
 >
 	<Dialog.Content class="sm:max-w-md">
@@ -33,12 +38,13 @@
 				class="grid gap-4"
 				use:enhance={async ({ formData }) => {
 					submitting = true;
-					await shrinkPhotoField(formData);
+					if (photo) formData.set('photo', await resizeImage(photo));
 					return async ({ result, update }) => {
 						submitting = false;
 						if (result.type === 'success') {
 							toast.success(`${tracking?.tracking_no} marked ${STATUS_LABEL[next!].toLowerCase()}`);
 							tracking = null;
+							photo = null;
 							onDone?.();
 						} else if (result.type === 'failure') {
 							toast.error(String(result.data?.error ?? 'Something went wrong'));
@@ -54,9 +60,6 @@
 					</Dialog.Title>
 					<Dialog.Description>
 						<span class="font-mono">{tracking.tracking_no}</span>
-						{#if tracking.description}
-							· {tracking.description}
-						{/if}
 					</Dialog.Description>
 				</Dialog.Header>
 
@@ -76,9 +79,8 @@
 						/>
 					</div>
 					<div class="grid gap-2">
-						<Label for="photo">Receipt photo</Label>
-						<Input id="photo" name="photo" type="file" accept="image/*" capture="environment" />
-						<p class="text-muted-foreground text-xs">JPG, PNG, WEBP or HEIC · resized automatically</p>
+						<Label>Receipt photo <span class="text-muted-foreground font-normal">(optional)</span></Label>
+						<FileDrop bind:file={photo} />
 					</div>
 				{:else}
 					<p class="text-muted-foreground text-sm">Confirms the parcel arrived at your house and closes the tracking.</p>

@@ -7,8 +7,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { NEXT_STATUS, STATUS_LABEL, type Tracking } from '$lib/trackings';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import EyeIcon from '@lucide/svelte/icons/eye';
-	import CopyIcon from '@lucide/svelte/icons/copy';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import PackageXIcon from '@lucide/svelte/icons/package-x';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -17,8 +16,14 @@
 	let {
 		tracking,
 		onAdvance,
+		onEdit,
 		showPrimary = true
-	}: { tracking: Tracking; onAdvance: (t: Tracking) => void; showPrimary?: boolean } = $props();
+	}: {
+		tracking: Tracking;
+		onAdvance: (t: Tracking) => void;
+		onEdit: (t: Tracking) => void;
+		showPrimary?: boolean;
+	} = $props();
 
 	let confirmDelete = $state(false);
 	let next = $derived(NEXT_STATUS[tracking.status]);
@@ -46,15 +51,6 @@
 			toast.error(result.error?.message ?? 'Something went wrong');
 		}
 	}
-
-	async function copy() {
-		try {
-			await navigator.clipboard.writeText(tracking.tracking_no);
-			toast.success('Copied');
-		} catch {
-			toast.error('Could not copy');
-		}
-	}
 </script>
 
 <div class="flex items-center justify-end gap-1">
@@ -74,17 +70,9 @@
 			{/snippet}
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content align="end" class="w-44">
-			<DropdownMenu.Item onSelect={() => (location.href = `/t/${tracking.id}`)}>
-				<EyeIcon /> View / edit
+			<DropdownMenu.Item onSelect={() => onEdit(tracking)}>
+				<PencilIcon /> Edit
 			</DropdownMenu.Item>
-			<DropdownMenu.Item onSelect={copy}>
-				<CopyIcon /> Copy number
-			</DropdownMenu.Item>
-			{#if next}
-				<DropdownMenu.Item onSelect={() => onAdvance(tracking)}>
-					<ArrowRightIcon /> Mark {STATUS_LABEL[next].toLowerCase()}
-				</DropdownMenu.Item>
-			{/if}
 			<DropdownMenu.Separator />
 			{#if tracking.status === 'ordered' || tracking.status === 'warehoused'}
 				<DropdownMenu.Item onSelect={() => post('lost')}>

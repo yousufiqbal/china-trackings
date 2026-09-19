@@ -8,9 +8,15 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Separator } from '$lib/components/ui/separator';
 	import { shrinkPhotoField } from '$lib/resize-image';
+	import { lightbox, openLightbox } from '$lib/lightbox.svelte';
 	import type { Tracking } from '$lib/trackings';
 
-	let { open = $bindable(false), tracking }: { open?: boolean; tracking: Tracking } = $props();
+	let {
+		open = $bindable(false),
+		tracking,
+		onDone,
+		onClose
+	}: { open?: boolean; tracking: Tracking; onDone?: () => void; onClose?: () => void } = $props();
 
 	let saving = $state(false);
 	let error = $state<string | null>(null);
@@ -26,10 +32,22 @@
 <Dialog.Root
 	bind:open
 	onOpenChange={(v) => {
-		if (!v) error = null;
+		if (!v) {
+			error = null;
+			onClose?.();
+		}
 	}}
 >
-	<Dialog.Content class="max-h-[92dvh] overflow-y-auto sm:max-w-xl">
+	<Dialog.Content
+		class="max-h-[92dvh] overflow-y-auto sm:max-w-xl"
+		onInteractOutside={(e) => {
+			// keep the edit dialog open while the lightbox (rendered outside it) is in use
+			if (lightbox.src) e.preventDefault();
+		}}
+		onEscapeKeydown={(e) => {
+			if (lightbox.src) e.preventDefault();
+		}}
+	>
 		<!-- key on open so the form re-reads current values each time it opens -->
 		{#key open}
 			<form
@@ -47,6 +65,7 @@
 							toast.success('Saved');
 							await update({ reset: false });
 							open = false;
+							onDone?.();
 						} else if (result.type === 'failure') {
 							error = String(result.data?.error ?? 'Could not save');
 						} else {
@@ -55,6 +74,7 @@
 					};
 				}}
 			>
+				<input type="hidden" name="id" value={tracking.id} />
 				<Dialog.Header>
 					<Dialog.Title>Edit tracking</Dialog.Title>
 					<Dialog.Description class="font-mono">{tracking.tracking_no}</Dialog.Description>
@@ -92,11 +112,18 @@
 					<Label for="e-photo">Receipt photo</Label>
 					{#if tracking.receipt_photo_id}
 						<div class="flex items-center gap-3">
-							<img
-								src="/photos/{tracking.receipt_photo_id}"
-								alt="Current receipt"
-								class="size-16 rounded-md border object-cover"
-							/>
+							<button
+								type="button"
+								class="shrink-0 cursor-zoom-in rounded-md focus-visible:ring-ring/50 focus-visible:ring-3 outline-none"
+								aria-label="View current receipt photo"
+								onclick={() => openLightbox(`/photos/${tracking.receipt_photo_id}`)}
+							>
+								<img
+									src="/photos/{tracking.receipt_photo_id}"
+									alt="Current receipt"
+									class="size-16 rounded-md border object-cover"
+								/>
+							</button>
 							<label class="text-muted-foreground flex items-center gap-2 text-xs">
 								<input type="checkbox" name="remove_photo" class="rounded" /> Remove current photo
 							</label>
