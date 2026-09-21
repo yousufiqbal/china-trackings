@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { navigating } from '$app/state';
+	import { fly } from 'svelte/transition';
+	import { STATUSES } from '$lib/trackings';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Table from '$lib/components/ui/table';
@@ -100,6 +102,18 @@
 		return isStatus(st) ? st : null;
 	});
 	let shownStatus = $derived(pendingStatus ?? data.filter.status);
+
+	// Direction for the mobile card fly-in: moving to a later tab slides in from the right.
+	// svelte-ignore state_referenced_locally
+	let prevStatus = $state<string>(data.filter.status);
+	let flyDir = $state(1);
+	$effect(() => {
+		const cur = data.filter.status;
+		if (cur !== prevStatus) {
+			flyDir = STATUSES.indexOf(cur as Status) >= STATUSES.indexOf(prevStatus as Status) ? 1 : -1;
+			prevStatus = cur;
+		}
+	});
 
 	let dateHead = $derived(data.filter.q ? 'Status date' : DATE_HEAD[data.filter.status as Status]);
 
@@ -355,9 +369,13 @@
 
 		<!-- Mobile cards -->
 		<ul class="grid min-w-0 gap-3 md:hidden">
-			{#each data.trackings as t (t.id)}
+			{#each data.trackings as t, i (t.id)}
 				{@const stale = isStale(t, data.now)}
-				<li class={cn('bg-card min-w-0 rounded-xl border p-4', stale && 'border-amber-500/40 bg-amber-500/5')}>
+				<li
+					class={cn('bg-card min-w-0 rounded-xl border p-4', stale && 'border-amber-500/40 bg-amber-500/5')}
+					in:fly|global={{ x: 32 * flyDir, duration: 220, delay: Math.min(i, 8) * 35 }}
+					out:fly|global={{ x: -32 * flyDir, duration: 140 }}
+				>
 					<div class="flex items-start justify-between gap-3">
 						<div class="flex min-w-0 gap-2">
 							<div class="min-w-0">
