@@ -1,4 +1,4 @@
-import { db, ensureSchema, query, queryOne, run } from './db';
+import { db, ensureSchema, query, queryMany, queryOne, run } from './db';
 import {
 	isStatus,
 	normalizeTrackingNo,
@@ -12,7 +12,7 @@ export interface ListFilter {
 	q?: string;
 }
 
-export async function listTrackings(filter: ListFilter = {}): Promise<Tracking[]> {
+function listSql(filter: ListFilter = {}): { sql: string; args: (string | number)[] } {
 	const where: string[] = [];
 	const args: (string | number)[] = [];
 
@@ -33,16 +33,32 @@ export async function listTrackings(filter: ListFilter = {}): Promise<Tracking[]
 
 	const sql = `SELECT * FROM trackings ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
 		ORDER BY ordered_at DESC, id DESC`;
+	return { sql, args };
+}
+
+export async function listTrackings(filter: ListFilter = {}): Promise<Tracking[]> {
+	const { sql, args } = listSql(filter);
 	return query<Tracking>(sql, args);
 }
 
-export async function countByStatus(): Promise<Record<Status, number>> {
-	const rows = await query<{ status: Status; n: number }>(
-		'SELECT status, COUNT(*) AS n FROM trackings GROUP BY status'
-	);
+const COUNT_SQL = 'SELECT status, COUNT(*) AS n FROM trackings GROUP BY status';
+
+function toCounts(rows: { status: Status; n: number }[]): Record<Status, number> {
 	const out: Record<Status, number> = { ordered: 0, delivered: 0, warehoused: 0, received: 0, lost: 0 };
 	for (const r of rows) out[r.status] = Number(r.n);
 	return out;
+}
+
+/** Everything the dashboard needs, fetched in a single round trip. */
+export async function dashboardData(filter: ListFilter) {
+	const [list, countRows, delivered] = await queryMany<
+		[Tracking[], { status: Status; n: number }[], Tracking[]]
+	>([listSql(filter), { sql: COUNT_SQL }, listSql({ status: 'delivered' })]);
+	return { trackings: list, counts: toCounts(countRows), delivered };
+}
+
+export async function countByStatus(): Promise<Record<Status, number>> {
+	return toCounts(await query<{ status: Status; n: number }>(COUNT_SQL));
 }
 
 export function getTracking(id: number) {

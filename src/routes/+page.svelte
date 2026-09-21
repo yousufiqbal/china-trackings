@@ -14,6 +14,7 @@
 	import EditDialog from '$lib/components/edit-dialog.svelte';
 	import DetailDialog from '$lib/components/detail-dialog.svelte';
 	import ReceiptRequestDialog from '$lib/components/receipt-request-dialog.svelte';
+	import TrackingNumberDialog from '$lib/components/tracking-number-dialog.svelte';
 	import RowActions from '$lib/components/row-actions.svelte';
 	import {
 		STATUS_LABEL,
@@ -51,6 +52,9 @@
 	let editTarget = $state<Tracking | null>(null);
 	let viewId = $state<number | null>(null);
 	let requestOpen = $state(false);
+	let numberTarget = $state<Tracking | null>(null);
+	/** Missing number: ask for it directly instead of opening the detail view. */
+	const openRow = (t: Tracking) => (t.tracking_no ? (viewId = t.id) : (numberTarget = t));
 	// Always render the freshest copy so nested actions (advance, photo) update the modal in place.
 	let viewTracking = $derived(viewId === null ? null : (data.trackings.find((t) => t.id === viewId) ?? null));
 	let showReceipt = $derived(
@@ -199,7 +203,7 @@
 	</div>
 
 	<!-- Desktop: stat tiles -->
-	<section class="hidden gap-3 md:grid md:grid-cols-4">
+	<section class="hidden gap-3 md:grid md:grid-cols-4" data-sveltekit-preload-data="hover">
 		{#each tiles as tile (tile.status)}
 			<a
 				href={filterHref(tile.status)}
@@ -301,7 +305,7 @@
 									<button
 										type="button"
 										class={cn('hover:underline', !t.tracking_no && 'font-sans text-amber-700 italic dark:text-amber-300')}
-										onclick={() => (viewId = t.id)}
+										onclick={() => openRow(t)}
 									>
 										{trackingLabel(t)}
 									</button>
@@ -386,7 +390,7 @@
 										'text-left font-mono text-sm font-medium break-all',
 										!t.tracking_no && 'font-sans text-amber-700 italic dark:text-amber-300'
 									)}
-									onclick={() => (viewId = t.id)}
+									onclick={() => openRow(t)}
 								>
 									{trackingLabel(t)}
 								</button>
@@ -445,6 +449,7 @@
 
 <!-- Mobile bottom navigation -->
 <nav
+	data-sveltekit-preload-data="tap"
 	class="bg-background/95 border-border/60 fixed inset-x-0 bottom-0 z-30 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.08)] backdrop-blur md:hidden"
 	aria-label="Status"
 >
@@ -472,6 +477,7 @@
 
 <AddDialog bind:open={addOpen} />
 <ReceiptRequestDialog bind:open={requestOpen} trackings={data.delivered} />
+<TrackingNumberDialog bind:tracking={numberTarget} />
 {#if viewTracking}
 	{#key viewTracking.id}
 		<DetailDialog tracking={viewTracking} now={data.now} open={true} onClose={() => (viewId = null)} />

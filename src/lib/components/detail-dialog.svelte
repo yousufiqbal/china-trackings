@@ -12,6 +12,7 @@
 	import AdvanceDialog from '$lib/components/advance-dialog.svelte';
 	import CommentDialog from '$lib/components/comment-dialog.svelte';
 	import PhotoDropzone from '$lib/components/photo-dropzone.svelte';
+	import TrackingNumberDialog from '$lib/components/tracking-number-dialog.svelte';
 	import { lightbox } from '$lib/lightbox.svelte';
 	import {
 		STATUSES,
@@ -62,10 +63,11 @@
 	let statusOpen = $state(false);
 	let advanceTarget = $state<Tracking | null>(null);
 	let commentTarget = $state<Tracking | null>(null);
+	let numberTarget = $state<Tracking | null>(null);
 
 	/** A child dialog / lightbox is up: keep this one open on outside click / Esc. */
 	let childOpen = $derived(
-		editOpen || statusOpen || advanceTarget !== null || commentTarget !== null || !!lightbox.src
+		editOpen || statusOpen || advanceTarget !== null || commentTarget !== null || numberTarget !== null || !!lightbox.src
 	);
 
 	const steps: Status[] = ['ordered', 'delivered', 'warehoused', 'received'];
@@ -182,7 +184,8 @@
 				class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
 			>
 				<TriangleAlertIcon class="mt-0.5 size-4 shrink-0" />
-				<span>No tracking number yet. Add it via <strong>Edit</strong> once the supplier sends it.</span>
+				<span class="flex-1">No tracking number yet.</span>
+				<Button size="sm" variant="outline" onclick={() => (numberTarget = t)}>Add number</Button>
 			</div>
 		{/if}
 
@@ -265,6 +268,7 @@
 {/if}
 <AdvanceDialog bind:tracking={advanceTarget} onDone={() => invalidateAll()} />
 <CommentDialog bind:tracking={commentTarget} onDone={() => invalidateAll()} />
+<TrackingNumberDialog bind:tracking={numberTarget} />
 
 <!-- Change status (manual override) -->
 <Dialog.Root bind:open={statusOpen}>

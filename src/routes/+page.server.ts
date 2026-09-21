@@ -3,11 +3,11 @@ import type { Actions, PageServerLoad } from './$types';
 import {
 	addTracking,
 	appendNote,
-	countByStatus,
+	dashboardData,
 	deleteTracking,
 	getTracking,
-	listTrackings,
-	setStatus
+	setStatus,
+	updateTracking
 } from '$lib/server/trackings';
 import { deletePhoto } from '$lib/server/photos';
 import { attachPhoto, handleAdvance, handleComment, handleSave } from '$lib/server/advance';
@@ -19,12 +19,9 @@ export const load: PageServerLoad = async ({ url }) => {
 	const q = url.searchParams.get('q') ?? '';
 
 	// A search spans every status; otherwise show the selected status only.
-	const [trackings, counts, delivered] = await Promise.all([
-		listTrackings({ status: q ? 'all' : status, q }),
-		countByStatus(),
-		// Always available for the "Request receipts" message, whatever tab is open.
-		listTrackings({ status: 'delivered' })
-	]);
+	// One database round trip: list for this view, counts, and the delivered list
+	// (always needed for the "Request receipts" message).
+	const { trackings, counts, delivered } = await dashboardData({ status: q ? 'all' : status, q });
 	return { trackings, counts, delivered, filter: { status, q }, now: Date.now() };
 };
 
@@ -44,6 +41,19 @@ export const actions: Actions = {
 		const r = await addTracking(missing ? null : raw, { notes: comment, ordered_at });
 		if (!r.ok) return fail(400, { action: 'add', error: r.error });
 		return { action: 'add', tracking_no: r.tracking_no };
+	},
+
+	/** Fill in a tracking number that was missing when the order was added. */
+	number: async ({ request }) => {
+		const form = await request.formData();
+		const id = idFrom(form);
+		if (!id) return fail(400, { error: 'Bad id' });
+		const raw = String(form.get('tracking_no') ?? '').trim();
+		if (!raw) return fail(400, { error: 'Enter a tracking number' });
+		if (/\s/.test(raw)) return fail(400, { error: 'One tracking number only' });
+		const err = await updateTracking(id, { tracking_no: raw });
+		if (err) return fail(400, { error: err });
+		return { saved: true };
 	},
 
 	/** After sending a receipt request to the forwarder: tag those trackings as alerted. */

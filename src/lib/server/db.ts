@@ -8,6 +8,8 @@ if (url.startsWith('file:')) mkdirSync(dirname(url.slice(5)), { recursive: true 
 
 export const db = createClient({ url, authToken: env.DATABASE_AUTH_TOKEN || undefined });
 
+const CURRENT_VERSION = '3';
+
 const STATUS_CHECK = `CHECK (status IN ('ordered','delivered','warehoused','received','lost'))`;
 
 const TRACKINGS_COLUMNS = `
@@ -110,9 +112,22 @@ let ready: Promise<void> | null = null;
 export function ensureSchema(): Promise<void> {
 	if (!ready) {
 		ready = (async () => {
-			await db.execute('PRAGMA foreign_keys = ON');
-			for (const sql of schema) await db.execute(sql);
+			// One round trip for all CREATE IF NOT EXISTS statements plus the version read.
+			const results = await db.batch(
+				[
+					'PRAGMA foreign_keys = ON',
+					...schema,
+					`SELECT value FROM schema_meta WHERE key = 'version'`
+				],
+				'write'
+			);
+			const version = results[results.length - 1].rows[0]?.value;
+			if (version === CURRENT_VERSION) return; // fast path: nothing to migrate
 			await migrate();
+			await db.execute({
+				sql: `INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('version', ?)`,
+				args: [CURRENT_VERSION]
+			});
 		})();
 	}
 	return ready;
@@ -133,4 +148,16 @@ export async function queryOne<T>(sql: string, args: InValue[] = []): Promise<T 
 export async function run(sql: string, args: InValue[] = []) {
 	await ensureSchema();
 	return db.execute({ sql, args });
+}
+
+/** Run several read queries in one round trip. */
+export async function queryMany<T extends unknown[][]>(
+	stmts: { sql: string; args?: InValue[] }[]
+): Promise<T> {
+	await ensureSchema();
+	const res = await db.batch(
+		stmts.map((s) => ({ sql: s.sql, args: s.args ?? [] })),
+		'read'
+	);
+	return res.map((r) => r.rows) as unknown as T;
 }
