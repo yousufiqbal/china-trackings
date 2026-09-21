@@ -13,7 +13,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { shrinkPhotoField } from '$lib/resize-image';
 	import { lightbox, openLightbox } from '$lib/lightbox.svelte';
-	import { ACTIVE_STATUSES, type Tracking } from '$lib/trackings';
+	import { ACTIVE_STATUSES, trackingLabel, type Tracking } from '$lib/trackings';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import PackageXIcon from '@lucide/svelte/icons/package-x';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
@@ -43,9 +43,9 @@
 		if (result.type === 'success') {
 			toast.success(
 				{
-					lost: `${tracking.tracking_no} marked lost`,
-					reopen: `${tracking.tracking_no} reopened`,
-					delete: `${tracking.tracking_no} deleted`
+					lost: `${trackingLabel(tracking)} marked lost`,
+					reopen: `${trackingLabel(tracking)} reopened`,
+					delete: `${trackingLabel(tracking)} deleted`
 				}[action]
 			);
 			open = false;
@@ -117,7 +117,7 @@
 					<div class="flex items-start justify-between gap-2">
 						<div>
 							<Dialog.Title>Edit tracking</Dialog.Title>
-							<Dialog.Description class="font-mono">{tracking.tracking_no}</Dialog.Description>
+							<Dialog.Description class="font-mono">{trackingLabel(tracking)}</Dialog.Description>
 						</div>
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger>
@@ -148,7 +148,7 @@
 
 				<div class="grid gap-1.5">
 					<Label for="e-tracking_no">Tracking number</Label>
-					<Input id="e-tracking_no" name="tracking_no" value={tracking.tracking_no} required class="font-mono" />
+					<Input id="e-tracking_no" name="tracking_no" value={tracking.tracking_no ?? ''} placeholder="Leave empty if the supplier has not sent it yet" class="font-mono" />
 				</div>
 				<Separator />
 
@@ -226,7 +226,7 @@
 <AlertDialog.Root bind:open={confirmDelete}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>Delete {tracking.tracking_no}?</AlertDialog.Title>
+			<AlertDialog.Title>Delete {trackingLabel(tracking)}?</AlertDialog.Title>
 			<AlertDialog.Description>
 				Removes the tracking, its history and receipt photo. Cannot be undone. If the parcel never
 				arrived, prefer "Mark lost" so you keep the record.

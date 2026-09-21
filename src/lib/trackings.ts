@@ -46,7 +46,8 @@ export const STATUS_DATE_FIELD = {
 
 export interface Tracking {
 	id: number;
-	tracking_no: string;
+	/** null = supplier has not provided a tracking number yet */
+	tracking_no: string | null;
 	supplier: string | null;
 	description: string | null;
 	status: Status;
@@ -102,6 +103,11 @@ export function daysInStatus(t: Tracking, now = Date.now()): number {
 export function isStale(t: Tracking, now = Date.now()): boolean {
 	const limit = STALE_AFTER_DAYS[t.status];
 	return limit !== undefined && daysInStatus(t, now) > limit;
+}
+
+/** Display text for a tracking, falling back to a label when the number is missing. */
+export function trackingLabel(t: Pick<Tracking, 'tracking_no'>): string {
+	return t.tracking_no ?? 'Missing tracking';
 }
 
 export function formatDate(ms: number | null | undefined): string {

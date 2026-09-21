@@ -21,6 +21,7 @@
 		daysInStatus,
 		formatDate,
 		isStale,
+		trackingLabel,
 		type Status,
 		type Tracking
 	} from '$lib/trackings';
@@ -52,7 +53,8 @@
 
 	let t = $derived(tracking);
 	let stale = $derived(isStale(t, now));
-	let next = $derived(NEXT_STATUS[t.status]);
+	// An order without a tracking number cannot leave Ordered.
+	let next = $derived(t.tracking_no ? NEXT_STATUS[t.status] : undefined);
 	let days = $derived(daysInStatus(t, now));
 	let lost = $derived(t.status === 'lost');
 
@@ -73,6 +75,7 @@
 	);
 
 	async function copy() {
+		if (!t.tracking_no) return;
 		try {
 			await navigator.clipboard.writeText(t.tracking_no);
 			toast.success('Copied');
@@ -102,10 +105,16 @@
 	>
 		<Dialog.Header class="pr-8 text-left">
 			<div class="flex items-center gap-1">
-				<Dialog.Title class="font-mono text-lg break-all sm:text-xl">{t.tracking_no}</Dialog.Title>
-				<Button variant="ghost" size="icon-sm" onclick={copy} aria-label="Copy tracking number">
-					<CopyIcon />
-				</Button>
+				<Dialog.Title
+					class={cn('font-mono text-lg break-all sm:text-xl', !t.tracking_no && 'font-sans text-amber-700 italic dark:text-amber-300')}
+				>
+					{trackingLabel(t)}
+				</Dialog.Title>
+				{#if t.tracking_no}
+					<Button variant="ghost" size="icon-sm" onclick={copy} aria-label="Copy tracking number">
+						<CopyIcon />
+					</Button>
+				{/if}
 				{#if showOpenLink}
 					<Button
 						variant="ghost"
@@ -168,6 +177,15 @@
 			</DropdownMenu.Root>
 		</div>
 
+		{#if !t.tracking_no}
+			<div
+				class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+			>
+				<TriangleAlertIcon class="mt-0.5 size-4 shrink-0" />
+				<span>No tracking number yet. Add it via <strong>Edit</strong> once the supplier sends it.</span>
+			</div>
+		{/if}
+
 		{#if lost}
 			<div
 				class="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200"
@@ -227,11 +245,17 @@
 					Drag &amp; drop, paste, or pick a file.
 				</p>
 			</div>
-			<PhotoDropzone
-				trackingId={t.id}
-				photoId={t.receipt_photo_id}
-				willWarehouse={t.status === 'ordered' || t.status === 'delivered'}
-			/>
+			{#if t.tracking_no}
+				<PhotoDropzone
+					trackingId={t.id}
+					photoId={t.receipt_photo_id}
+					willWarehouse={t.status === 'ordered' || t.status === 'delivered'}
+				/>
+			{:else}
+				<p class="text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-center text-sm">
+					Available once the tracking number is added.
+				</p>
+			{/if}
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

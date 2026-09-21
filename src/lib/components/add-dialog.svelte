@@ -12,12 +12,16 @@
 
 	let adding = $state(false);
 	let error = $state<string | null>(null);
+	let noTracking = $state(false);
 </script>
 
 <Dialog.Root
 	bind:open
 	onOpenChange={(v) => {
-		if (!v) error = null;
+		if (!v) {
+			error = null;
+			noTracking = false;
+		}
 	}}
 >
 	<Dialog.Content class="sm:max-w-md">
@@ -31,7 +35,7 @@
 				return async ({ result, update }) => {
 					adding = false;
 					if (result.type === 'success' && result.data) {
-						toast.success(`Added ${(result.data as { tracking_no: string }).tracking_no}`);
+						toast.success(`Added ${(result.data as { tracking_no: string | null }).tracking_no ?? 'order (tracking pending)'}`);
 						await update();
 						open = false;
 					} else if (result.type === 'failure') {
@@ -48,12 +52,18 @@
 				<Dialog.Description>One tracking number per entry. Duplicates are rejected.</Dialog.Description>
 			</Dialog.Header>
 
-			<div class="grid gap-1.5">
+			<label class="flex cursor-pointer items-center gap-2 text-sm">
+				<input type="checkbox" name="no_tracking" bind:checked={noTracking} />
+				Tracking number not available yet
+			</label>
+
+			<div class="grid gap-1.5" hidden={noTracking}>
 				<Label for="add-number">Tracking number</Label>
 				<Input
 					id="add-number"
 					name="number"
-					required
+					required={!noTracking}
+					disabled={noTracking}
 					autofocus
 					autocomplete="off"
 					autocapitalize="characters"
@@ -71,9 +81,21 @@
 
 			<div class="grid gap-1.5">
 				<Label for="add-comment">
-					Comment <span class="text-muted-foreground font-normal">(optional)</span>
+					Comment
+					{#if noTracking}
+						<span class="text-destructive font-normal">(required, so you can recognise this order)</span>
+					{:else}
+						<span class="text-muted-foreground font-normal">(optional)</span>
+					{/if}
 				</Label>
-				<Textarea id="add-comment" name="comment" rows={2} maxlength={2000} placeholder="What is it, who sent it…" />
+				<Textarea
+					id="add-comment"
+					name="comment"
+					rows={2}
+					maxlength={2000}
+					required={noTracking}
+					placeholder={noTracking ? 'e.g. 20x blue phone cases from Shenzhen Longwin' : 'What is it, who sent it…'}
+				/>
 			</div>
 
 			{#if error}

@@ -12,7 +12,7 @@ const STATUS_CHECK = `CHECK (status IN ('ordered','delivered','warehoused','rece
 
 const TRACKINGS_COLUMNS = `
 		id            INTEGER PRIMARY KEY AUTOINCREMENT,
-		tracking_no   TEXT NOT NULL UNIQUE,
+		tracking_no   TEXT UNIQUE,
 		supplier      TEXT,
 		description   TEXT,
 		status        TEXT NOT NULL DEFAULT 'ordered' ${STATUS_CHECK},
@@ -48,44 +48,59 @@ const schema = [
 	`CREATE INDEX IF NOT EXISTS idx_events_tracking ON status_events(tracking_id)`
 ];
 
-/**
- * v2: statuses became ordered -> delivered (at warehouse, no receipt) -> warehoused
- * -> received (at home). Old "delivered" rows meant "received", so they are renamed
- * and their timestamp moves to the new received_at column. SQLite cannot alter a
- * CHECK constraint, so the table is rebuilt.
- */
-async function migrateToV2() {
-	const cols = await db.execute(`PRAGMA table_info(trackings)`);
-	const hasReceivedAt = cols.rows.some((r) => r.name === 'received_at');
-	if (hasReceivedAt) return;
-
+/** Rebuild `trackings` with the current column definition, copying data through `selectSql`. */
+async function rebuildTrackings(selectSql: string, version: string) {
 	await db.execute('PRAGMA foreign_keys = OFF');
 	const tx = await db.transaction('write');
 	try {
-		await tx.execute(`CREATE TABLE trackings_v2 (${TRACKINGS_COLUMNS})`);
-		await tx.execute(`
-			INSERT INTO trackings_v2 (id, tracking_no, supplier, description, status, receipt_ref, receipt_photo_id,
-				notes, ordered_at, delivered_at, warehoused_at, received_at, created_at, updated_at)
-			SELECT id, tracking_no, supplier, description,
-				CASE status WHEN 'delivered' THEN 'received' ELSE status END,
-				receipt_ref, receipt_photo_id, notes, ordered_at,
-				NULL,
-				warehoused_at,
-				CASE status WHEN 'delivered' THEN delivered_at ELSE NULL END,
-				created_at, updated_at
-			FROM trackings`);
+		await tx.execute(`CREATE TABLE trackings_new (${TRACKINGS_COLUMNS})`);
+		await tx.execute(`INSERT INTO trackings_new (id, tracking_no, supplier, description, status, receipt_ref, receipt_photo_id,
+			notes, ordered_at, delivered_at, warehoused_at, received_at, created_at, updated_at) ${selectSql}`);
 		await tx.execute(`DROP TABLE trackings`);
-		await tx.execute(`ALTER TABLE trackings_v2 RENAME TO trackings`);
+		await tx.execute(`ALTER TABLE trackings_new RENAME TO trackings`);
 		await tx.execute(`CREATE INDEX IF NOT EXISTS idx_trackings_status ON trackings(status)`);
-		await tx.execute(`UPDATE status_events SET to_status = 'received' WHERE to_status = 'delivered'`);
-		await tx.execute(`UPDATE status_events SET from_status = 'received' WHERE from_status = 'delivered'`);
-		await tx.execute(`INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('version', '2')`);
+		await tx.execute({ sql: `INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('version', ?)`, args: [version] });
 		await tx.commit();
 	} catch (e) {
 		await tx.rollback();
 		throw e;
 	} finally {
 		await db.execute('PRAGMA foreign_keys = ON');
+	}
+}
+
+async function migrate() {
+	const cols = (await db.execute(`PRAGMA table_info(trackings)`)).rows as unknown as {
+		name: string;
+		notnull: number;
+	}[];
+	const hasReceivedAt = cols.some((c) => c.name === 'received_at');
+	const trackingNoRequired = cols.find((c) => c.name === 'tracking_no')?.notnull === 1;
+
+	// v2: statuses became ordered -> delivered (at warehouse, no receipt) -> warehoused -> received.
+	// Old "delivered" rows meant "received": rename them and move the timestamp.
+	if (!hasReceivedAt) {
+		await rebuildTrackings(
+			`SELECT id, tracking_no, supplier, description,
+				CASE status WHEN 'delivered' THEN 'received' ELSE status END,
+				receipt_ref, receipt_photo_id, notes, ordered_at,
+				NULL, warehoused_at,
+				CASE status WHEN 'delivered' THEN delivered_at ELSE NULL END,
+				created_at, updated_at FROM trackings`,
+			'3'
+		);
+		await db.execute(`UPDATE status_events SET to_status = 'received' WHERE to_status = 'delivered'`);
+		await db.execute(`UPDATE status_events SET from_status = 'received' WHERE from_status = 'delivered'`);
+		return;
+	}
+
+	// v3: tracking_no may be NULL (order placed, supplier has not given a number yet).
+	if (trackingNoRequired) {
+		await rebuildTrackings(
+			`SELECT id, tracking_no, supplier, description, status, receipt_ref, receipt_photo_id,
+				notes, ordered_at, delivered_at, warehoused_at, received_at, created_at, updated_at FROM trackings`,
+			'3'
+		);
 	}
 }
 
@@ -97,7 +112,7 @@ export function ensureSchema(): Promise<void> {
 		ready = (async () => {
 			await db.execute('PRAGMA foreign_keys = ON');
 			for (const sql of schema) await db.execute(sql);
-			await migrateToV2();
+			await migrate();
 		})();
 	}
 	return ready;

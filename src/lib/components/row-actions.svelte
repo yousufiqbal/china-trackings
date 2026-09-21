@@ -16,7 +16,8 @@
 		showPrimary?: boolean;
 	} = $props();
 
-	let next = $derived(NEXT_STATUS[tracking.status]);
+	// An order without a tracking number cannot leave Ordered.
+	let next = $derived(tracking.tracking_no ? NEXT_STATUS[tracking.status] : undefined);
 </script>
 
 <div class="flex items-center justify-end gap-1">

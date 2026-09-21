@@ -7,7 +7,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import FileDrop from '$lib/components/file-drop.svelte';
 	import { resizeImage } from '$lib/resize-image';
-	import { NEXT_STATUS, STATUS_LABEL, todayInput, type Status, type Tracking } from '$lib/trackings';
+	import { NEXT_STATUS, STATUS_LABEL, todayInput, trackingLabel, type Status, type Tracking } from '$lib/trackings';
 
 	let {
 		tracking = $bindable(null),
@@ -57,7 +57,7 @@
 					return async ({ result, update }) => {
 						submitting = false;
 						if (result.type === 'success') {
-							toast.success(`${tracking?.tracking_no} marked ${STATUS_LABEL[next!].toLowerCase()}`);
+							toast.success(`${tracking ? trackingLabel(tracking) : ''} marked ${STATUS_LABEL[next!].toLowerCase()}`);
 							tracking = null;
 							photo = null;
 							onDone?.();
@@ -72,7 +72,7 @@
 				<Dialog.Header>
 					<Dialog.Title>{TITLE[next]}</Dialog.Title>
 					<Dialog.Description>
-						<span class="font-mono">{tracking.tracking_no}</span>
+						<span class="font-mono">{trackingLabel(tracking)}</span>
 					</Dialog.Description>
 				</Dialog.Header>
 

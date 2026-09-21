@@ -24,11 +24,16 @@ export async function handleAdvance(form: FormData) {
 		return fail(400, { action: 'advance', error: (e as Error).message });
 	}
 
-	await setStatus(id, to, {
-		receipt_ref: to === 'warehoused' ? receipt_ref : undefined,
-		receipt_photo_id: photoId ?? undefined,
-		at: parseDateInput(form.get('at')) ?? undefined
-	});
+	try {
+		await setStatus(id, to, {
+			receipt_ref: to === 'warehoused' ? receipt_ref : undefined,
+			receipt_photo_id: photoId ?? undefined,
+			at: parseDateInput(form.get('at')) ?? undefined
+		});
+	} catch (e) {
+		await deletePhoto(photoId);
+		return fail(400, { action: 'advance', error: (e as Error).message });
+	}
 	if (photoId && t.receipt_photo_id) await deletePhoto(t.receipt_photo_id);
 	return { action: 'advance' as const, to, tracking_no: t.tracking_no };
 }
@@ -41,6 +46,7 @@ export async function handleAdvance(form: FormData) {
 export async function attachPhoto(id: number, file: File | null | undefined): Promise<number | null> {
 	const t = await getTracking(id);
 	if (!t) throw new Error('Not found');
+	if (!t.tracking_no) throw new Error('Add the tracking number before attaching a receipt');
 	const photoId = await savePhoto(file);
 	if (!photoId) return null;
 
@@ -93,7 +99,7 @@ export async function handleSave(id: number, form: FormData) {
 	if (receipt_photo_id === undefined && form.get('remove_photo') === 'on') receipt_photo_id = null;
 
 	const err = await updateTracking(id, {
-		tracking_no: String(form.get('tracking_no') ?? ''),
+		tracking_no: String(form.get('tracking_no') ?? '').trim() || null,
 		receipt_ref: String(form.get('receipt_ref') ?? '').trim() || null,
 		notes: String(form.get('notes') ?? '').trim() || null,
 		receipt_photo_id,
@@ -110,7 +116,11 @@ export async function handleSave(id: number, form: FormData) {
 	if (receipt_photo_id !== undefined) await deletePhoto(current.receipt_photo_id);
 	// A receipt photo means the warehouse acknowledged it.
 	if (receipt_photo_id && (current.status === 'ordered' || current.status === 'delivered')) {
-		await setStatus(id, 'warehoused', { note: 'Receipt photo added' });
+		try {
+			await setStatus(id, 'warehoused', { note: 'Receipt photo added' });
+		} catch {
+			// no tracking number yet: keep the photo, stay in Ordered
+		}
 	}
 	return { saved: true };
 }

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { navigating } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Table from '$lib/components/ui/table';
@@ -10,6 +11,7 @@
 	import CommentDialog from '$lib/components/comment-dialog.svelte';
 	import EditDialog from '$lib/components/edit-dialog.svelte';
 	import DetailDialog from '$lib/components/detail-dialog.svelte';
+	import ReceiptRequestDialog from '$lib/components/receipt-request-dialog.svelte';
 	import RowActions from '$lib/components/row-actions.svelte';
 	import {
 		STATUS_LABEL,
@@ -19,6 +21,8 @@
 		formatDate,
 		isStale,
 		statusSince,
+		trackingLabel,
+		isStatus,
 		type Status,
 		type Tracking
 	} from '$lib/trackings';
@@ -35,6 +39,7 @@
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import PackageXIcon from '@lucide/svelte/icons/package-x';
+	import BellRingIcon from '@lucide/svelte/icons/bell-ring';
 	import { toast } from 'svelte-sonner';
 
 	let { data } = $props();
@@ -43,6 +48,7 @@
 	let commentTarget = $state<Tracking | null>(null);
 	let editTarget = $state<Tracking | null>(null);
 	let viewId = $state<number | null>(null);
+	let requestOpen = $state(false);
 	// Always render the freshest copy so nested actions (advance, photo) update the modal in place.
 	let viewTracking = $derived(viewId === null ? null : (data.trackings.find((t) => t.id === viewId) ?? null));
 	let showReceipt = $derived(
@@ -86,6 +92,15 @@
 		received: 'Received on',
 		lost: 'Lost on'
 	};
+	// While a tab tap is in flight, highlight the destination immediately so the wait is not noticeable.
+	let pendingStatus = $derived.by(() => {
+		const to = navigating.to?.url;
+		if (!to || to.pathname !== '/' || to.searchParams.has('q')) return null;
+		const st = to.searchParams.get('status') ?? 'ordered';
+		return isStatus(st) ? st : null;
+	});
+	let shownStatus = $derived(pendingStatus ?? data.filter.status);
+
 	let dateHead = $derived(data.filter.q ? 'Status date' : DATE_HEAD[data.filter.status as Status]);
 
 	// Same hues as StatusBadge, for the mobile bottom nav.
@@ -104,7 +119,8 @@
 		lost: 'border-red-500 bg-red-500/10 text-red-800 dark:text-red-200'
 	};
 
-	async function copyNo(no: string) {
+	async function copyNo(no: string | null) {
+		if (!no) return;
 		try {
 			await navigator.clipboard.writeText(no);
 			toast.success('Copied ' + no);
@@ -149,7 +165,11 @@
 						</Button>
 					{/snippet}
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-44">
+				<DropdownMenu.Content align="end" class="w-52">
+					<DropdownMenu.Item onSelect={() => (requestOpen = true)} disabled={!data.counts.delivered}>
+						<BellRingIcon /> Request receipts
+						<span class="text-muted-foreground ml-auto tabular-nums">{data.counts.delivered}</span>
+					</DropdownMenu.Item>
 					<DropdownMenu.Item onSelect={() => goto(filterHref('lost'))}>
 						<PackageXIcon /> Lost parcels
 						<span class="text-muted-foreground ml-auto tabular-nums">{data.counts.lost}</span>
@@ -169,10 +189,10 @@
 		{#each tiles as tile (tile.status)}
 			<a
 				href={filterHref(tile.status)}
-				aria-current={data.filter.status === tile.status ? 'page' : undefined}
+				aria-current={shownStatus === tile.status ? 'page' : undefined}
 				class={cn(
 					'bg-card hover:bg-accent/40 rounded-xl border p-4 transition-colors',
-					data.filter.status === tile.status && 'border-primary ring-primary/20 ring-2'
+					shownStatus === tile.status && 'border-primary ring-primary/20 ring-2'
 				)}
 			>
 				<div class="flex items-center justify-between gap-2">
@@ -264,18 +284,24 @@
 						<Table.Row class={cn(stale && 'bg-amber-500/5')}>
 							<Table.Cell class="font-mono text-[13px]">
 								<div class="group/no flex items-center gap-1">
-									<button type="button" class="hover:underline" onclick={() => (viewId = t.id)}>
-										{t.tracking_no}
-									</button>
 									<button
 										type="button"
-										class="text-muted-foreground hover:text-foreground rounded p-1 opacity-0 transition-opacity group-hover/no:opacity-100 focus-visible:opacity-100"
-										aria-label="Copy tracking number"
-										title="Copy"
-										onclick={() => copyNo(t.tracking_no)}
+										class={cn('hover:underline', !t.tracking_no && 'font-sans text-amber-700 italic dark:text-amber-300')}
+										onclick={() => (viewId = t.id)}
 									>
-										<CopyIcon class="size-3.5" />
+										{trackingLabel(t)}
 									</button>
+									{#if t.tracking_no}
+										<button
+											type="button"
+											class="text-muted-foreground hover:text-foreground rounded p-1 opacity-0 transition-opacity group-hover/no:opacity-100 focus-visible:opacity-100"
+											aria-label="Copy tracking number"
+											title="Copy"
+											onclick={() => copyNo(t.tracking_no)}
+										>
+											<CopyIcon class="size-3.5" />
+										</button>
+									{/if}
 								</div>
 							</Table.Cell>
 							<Table.Cell><StatusBadge status={t.status} /></Table.Cell>
@@ -338,19 +364,24 @@
 							<div class="flex items-start gap-1">
 								<button
 									type="button"
-									class="text-left font-mono text-sm font-medium break-all"
+									class={cn(
+										'text-left font-mono text-sm font-medium break-all',
+										!t.tracking_no && 'font-sans text-amber-700 italic dark:text-amber-300'
+									)}
 									onclick={() => (viewId = t.id)}
 								>
-									{t.tracking_no}
+									{trackingLabel(t)}
 								</button>
-								<button
-									type="button"
-									class="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5"
-									aria-label="Copy tracking number"
-									onclick={() => copyNo(t.tracking_no)}
-								>
-									<CopyIcon class="size-3.5" />
-								</button>
+								{#if t.tracking_no}
+									<button
+										type="button"
+										class="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5"
+										aria-label="Copy tracking number"
+										onclick={() => copyNo(t.tracking_no)}
+									>
+										<CopyIcon class="size-3.5" />
+									</button>
+								{/if}
 							</div>
 							<button
 								type="button"
@@ -382,7 +413,7 @@
 								</button>
 							{/if}
 						</div>
-						{#if NEXT_STATUS[t.status]}
+						{#if t.tracking_no && NEXT_STATUS[t.status]}
 							<Button size="sm" variant="outline" onclick={() => (advanceTarget = t)}>
 								{STATUS_LABEL[NEXT_STATUS[t.status]!]}
 							</Button>
@@ -401,14 +432,16 @@
 >
 	<div class="grid grid-cols-4">
 		{#each tiles as tile (tile.status)}
-			{@const active = data.filter.status === tile.status}
+			{@const active = shownStatus === tile.status}
 			<a
 				href={filterHref(tile.status)}
 				aria-current={active ? 'page' : undefined}
 				class={cn(
-					'flex flex-col items-center gap-0.5 border-t-2 px-1 py-3 text-center leading-tight transition-colors',
-					active ? NAV_ACTIVE[tile.status] : 'text-muted-foreground border-transparent'
+					'active:bg-muted flex flex-col items-center gap-0.5 border-t-2 px-1 py-3 text-center leading-tight transition-colors duration-100 select-none',
+					active ? NAV_ACTIVE[tile.status] : 'text-muted-foreground border-transparent',
+					pendingStatus === tile.status && 'animate-pulse'
 				)}
+				style="-webkit-tap-highlight-color: transparent"
 			>
 				<span class={cn('text-xl font-semibold tabular-nums', NAV_COUNT[tile.status])}>
 					{data.counts[tile.status]}
@@ -420,6 +453,7 @@
 </nav>
 
 <AddDialog bind:open={addOpen} />
+<ReceiptRequestDialog bind:open={requestOpen} trackings={data.delivered} />
 {#if viewTracking}
 	{#key viewTracking.id}
 		<DetailDialog tracking={viewTracking} now={data.now} open={true} onClose={() => (viewId = null)} />

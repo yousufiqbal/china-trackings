@@ -4,7 +4,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Textarea } from '$lib/components/ui/textarea';
-	import type { Tracking } from '$lib/trackings';
+	import { trackingLabel, type Tracking } from '$lib/trackings';
 
 	let {
 		tracking = $bindable(null),
@@ -71,7 +71,7 @@
 				<input type="hidden" name="id" value={tracking.id} />
 				<Dialog.Header>
 					<Dialog.Title>Comment</Dialog.Title>
-					<Dialog.Description class="font-mono">{tracking.tracking_no}</Dialog.Description>
+					<Dialog.Description class="font-mono">{trackingLabel(tracking)}</Dialog.Description>
 				</Dialog.Header>
 
 				<div class="flex flex-wrap gap-2">

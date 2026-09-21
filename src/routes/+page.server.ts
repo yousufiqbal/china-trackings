@@ -1,7 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import {
-	addTrackings,
+	addTracking,
+	appendNote,
 	countByStatus,
 	deleteTracking,
 	getTracking,
@@ -10,7 +11,7 @@ import {
 } from '$lib/server/trackings';
 import { deletePhoto } from '$lib/server/photos';
 import { attachPhoto, handleAdvance, handleComment, handleSave } from '$lib/server/advance';
-import { isStatus, normalizeTrackingNo, parseDateInput, type Status } from '$lib/trackings';
+import { isStatus, parseDateInput, type Status } from '$lib/trackings';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const s = url.searchParams.get('status');
@@ -18,11 +19,13 @@ export const load: PageServerLoad = async ({ url }) => {
 	const q = url.searchParams.get('q') ?? '';
 
 	// A search spans every status; otherwise show the selected status only.
-	const [trackings, counts] = await Promise.all([
+	const [trackings, counts, delivered] = await Promise.all([
 		listTrackings({ status: q ? 'all' : status, q }),
-		countByStatus()
+		countByStatus(),
+		// Always available for the "Request receipts" message, whatever tab is open.
+		listTrackings({ status: 'delivered' })
 	]);
-	return { trackings, counts, filter: { status, q }, now: Date.now() };
+	return { trackings, counts, delivered, filter: { status, q }, now: Date.now() };
 };
 
 function idFrom(form: FormData): number | null {
@@ -33,18 +36,23 @@ function idFrom(form: FormData): number | null {
 export const actions: Actions = {
 	add: async ({ request }) => {
 		const form = await request.formData();
-		const number = normalizeTrackingNo(String(form.get('number') ?? ''));
+		const missing = form.get('no_tracking') === 'on';
+		const raw = String(form.get('number') ?? '').trim();
+		if (!missing && /\s/.test(raw)) return fail(400, { action: 'add', error: 'One tracking number at a time' });
 		const comment = String(form.get('comment') ?? '').trim().slice(0, 2000);
-		if (!number) return fail(400, { action: 'add', error: 'Enter a tracking number' });
-		if (/\s/.test(String(form.get('number')).trim())) {
-			return fail(400, { action: 'add', error: 'One tracking number at a time' });
-		}
-
 		const ordered_at = parseDateInput(form.get('ordered_at'));
-		const result = await addTrackings([number], { notes: comment, ordered_at });
-		if (result.duplicates.length) return fail(409, { action: 'add', error: `${number} already exists` });
-		if (result.invalid.length) return fail(400, { action: 'add', error: 'Tracking number must be 4-64 characters' });
-		return { action: 'add', tracking_no: number };
+		const r = await addTracking(missing ? null : raw, { notes: comment, ordered_at });
+		if (!r.ok) return fail(400, { action: 'add', error: r.error });
+		return { action: 'add', tracking_no: r.tracking_no };
+	},
+
+	/** After sending a receipt request to the forwarder: tag those trackings as alerted. */
+	alerted: async ({ request }) => {
+		const form = await request.formData();
+		const ids = form.getAll('ids').map(Number).filter((n) => Number.isInteger(n) && n > 0);
+		if (!ids.length) return fail(400, { error: 'Nothing selected' });
+		await appendNote(ids, 'Alerted');
+		return { action: 'alerted', count: ids.length };
 	},
 
 	/** Advance to the next status on the happy path (ordered -> delivered -> warehoused -> received). */
@@ -73,8 +81,12 @@ export const actions: Actions = {
 		const to = form.get('status');
 		if (!isStatus(to)) return fail(400, { error: 'Bad status' });
 		const note = String(form.get('note') ?? '').trim() || null;
-		const t = await setStatus(id, to, { note });
-		if (!t) return fail(404, { error: 'Not found' });
+		try {
+			const t = await setStatus(id, to, { note });
+			if (!t) return fail(404, { error: 'Not found' });
+		} catch (e) {
+			return fail(400, { error: (e as Error).message });
+		}
 		return { saved: true };
 	},
 	save: async ({ request }) => {

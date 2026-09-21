@@ -56,69 +56,54 @@ export function getEvents(trackingId: number) {
 	);
 }
 
-export interface AddResult {
-	added: string[];
-	duplicates: string[];
-	invalid: string[];
-}
+export type AddOutcome =
+	| { ok: true; id: number; tracking_no: string | null }
+	| { ok: false; error: string };
 
 /**
- * Bulk-insert tracking numbers. Numbers are normalised (whitespace removed,
- * upper-cased) so duplicates are caught regardless of how they were typed.
+ * Insert one tracking. The number is normalised (whitespace removed, upper-cased)
+ * so duplicates are caught regardless of how they were typed. A null number means
+ * the supplier has not provided one yet; a comment is then required so the row is
+ * still recognisable.
  */
-export async function addTrackings(
-	rawNumbers: string[],
-	meta: { supplier?: string; description?: string; notes?: string; ordered_at?: number | null }
-): Promise<AddResult> {
+export async function addTracking(
+	rawNumber: string | null,
+	meta: { notes?: string | null; ordered_at?: number | null }
+): Promise<AddOutcome> {
 	await ensureSchema();
-	const result: AddResult = { added: [], duplicates: [], invalid: [] };
-	const seen = new Set<string>();
 	const now = Date.now();
 	const orderedAt = meta.ordered_at ?? now;
+	const notes = meta.notes?.trim() || null;
 
-	for (const raw of rawNumbers) {
-		const no = normalizeTrackingNo(raw);
-		if (!no) continue;
-		if (no.length < 4 || no.length > 64) {
-			result.invalid.push(no);
-			continue;
-		}
-		if (seen.has(no)) {
-			result.duplicates.push(no);
-			continue;
-		}
-		seen.add(no);
-
-		const existing = await queryOne<{ id: number }>(
-			'SELECT id FROM trackings WHERE tracking_no = ?',
-			[no]
-		);
-		if (existing) {
-			result.duplicates.push(no);
-			continue;
-		}
-
-		const tx = await db.transaction('write');
-		try {
-			const ins = await tx.execute({
-				sql: `INSERT INTO trackings (tracking_no, supplier, description, notes, status, ordered_at, created_at, updated_at)
-					VALUES (?, ?, ?, ?, 'ordered', ?, ?, ?)`,
-				args: [no, meta.supplier || null, meta.description || null, meta.notes || null, orderedAt, now, now]
-			});
-			await tx.execute({
-				sql: `INSERT INTO status_events (tracking_id, from_status, to_status, note, at) VALUES (?, NULL, 'ordered', NULL, ?)`,
-				args: [ins.lastInsertRowid!, orderedAt]
-			});
-			await tx.commit();
-			result.added.push(no);
-		} catch (e) {
-			await tx.rollback();
-			// Race: another request inserted the same number between our check and insert.
-			if (String(e).includes('UNIQUE')) result.duplicates.push(no);
-			else throw e;
-		}
+	const no = rawNumber === null ? null : normalizeTrackingNo(rawNumber);
+	if (no !== null) {
+		if (!no) return { ok: false, error: 'Enter a tracking number' };
+		if (no.length < 4 || no.length > 64) return { ok: false, error: 'Tracking number must be 4-64 characters' };
+		const existing = await queryOne<{ id: number }>('SELECT id FROM trackings WHERE tracking_no = ?', [no]);
+		if (existing) return { ok: false, error: `${no} already exists` };
+	} else if (!notes) {
+		return { ok: false, error: 'Add a comment so you can recognise this order until the tracking arrives' };
 	}
-	return result;
+
+	const tx = await db.transaction('write');
+	try {
+		const ins = await tx.execute({
+			sql: `INSERT INTO trackings (tracking_no, notes, status, ordered_at, created_at, updated_at)
+				VALUES (?, ?, 'ordered', ?, ?, ?)`,
+			args: [no, notes, orderedAt, now, now]
+		});
+		await tx.execute({
+			sql: `INSERT INTO status_events (tracking_id, from_status, to_status, note, at) VALUES (?, NULL, 'ordered', NULL, ?)`,
+			args: [ins.lastInsertRowid!, orderedAt]
+		});
+		await tx.commit();
+		return { ok: true, id: Number(ins.lastInsertRowid), tracking_no: no };
+	} catch (e) {
+		await tx.rollback();
+		// Race: another request inserted the same number between our check and insert.
+		if (String(e).includes('UNIQUE')) return { ok: false, error: `${no} already exists` };
+		throw e;
+	}
 }
 
 export interface TransitionOptions {
@@ -138,6 +123,9 @@ export async function setStatus(
 	if (!isStatus(to)) throw new Error(`Invalid status: ${to}`);
 	const current = await getTracking(id);
 	if (!current) return null;
+	if (!current.tracking_no && to !== 'ordered' && to !== 'lost') {
+		throw new Error('Add the tracking number first; an order without one cannot move past Ordered');
+	}
 
 	const at = opts.at ?? Date.now();
 	const sets: string[] = ['status = ?', 'updated_at = ?'];
@@ -200,7 +188,8 @@ export async function setStatus(
 }
 
 export interface UpdateFields {
-	tracking_no?: string;
+	/** null clears the number (tracking not yet known) */
+	tracking_no?: string | null;
 	supplier?: string | null;
 	description?: string | null;
 	receipt_ref?: string | null;
@@ -218,13 +207,18 @@ export async function updateTracking(id: number, fields: UpdateFields): Promise<
 	const args: (string | number | null)[] = [];
 
 	if (fields.tracking_no !== undefined) {
-		const no = normalizeTrackingNo(fields.tracking_no);
-		if (!no) return 'Tracking number cannot be empty';
-		const clash = await queryOne<{ id: number }>(
-			'SELECT id FROM trackings WHERE tracking_no = ? AND id != ?',
-			[no, id]
-		);
-		if (clash) return `Tracking number ${no} already exists`;
+		const no = fields.tracking_no === null ? null : normalizeTrackingNo(fields.tracking_no) || null;
+		if (no === null) {
+			const notes = fields.notes !== undefined ? fields.notes : (await getTracking(id))?.notes;
+			if (!notes) return 'Without a tracking number a comment is required';
+		} else {
+			if (no.length < 4 || no.length > 64) return 'Tracking number must be 4-64 characters';
+			const clash = await queryOne<{ id: number }>(
+				'SELECT id FROM trackings WHERE tracking_no = ? AND id != ?',
+				[no, id]
+			);
+			if (clash) return `Tracking number ${no} already exists`;
+		}
 		sets.push('tracking_no = ?');
 		args.push(no);
 	}
@@ -253,4 +247,16 @@ export async function updateTracking(id: number, fields: UpdateFields): Promise<
 
 export async function deleteTracking(id: number) {
 	await run('DELETE FROM trackings WHERE id = ?', [id]);
+}
+
+/** Append a phrase to the comment of several trackings (used after sending an alert). */
+export async function appendNote(ids: number[], phrase: string) {
+	for (const id of ids) {
+		const t = await getTracking(id);
+		if (!t) continue;
+		const parts = (t.notes ?? '').split(/[,\n]/).map((p) => p.trim().toLowerCase());
+		if (parts.includes(phrase.toLowerCase())) continue;
+		const base = (t.notes ?? '').trim().replace(/,\s*$/, '');
+		await updateTracking(id, { notes: base ? `${base}, ${phrase}` : phrase });
+	}
 }
