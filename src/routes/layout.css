@@ -141,6 +141,15 @@ body {
 	overflow-x: hidden;
 }
 
+/* Desktop only: always show the vertical scrollbar track and reserve its gutter, so
+   short pages, long pages and open dialogs (body scroll lock) keep the same width. */
+@media (min-width: 768px) and (hover: hover) {
+	html {
+		overflow-y: scroll;
+		scrollbar-gutter: stable;
+	}
+}
+
 /* Tailwind v4 resets buttons to cursor: default; we want the hand everywhere. */
 @layer base {
 	button:not(:disabled),
