@@ -54,8 +54,9 @@
 
 	let t = $derived(tracking);
 	let stale = $derived(isStale(t, now));
-	// An order without a tracking number cannot leave Ordered.
-	let next = $derived(t.tracking_no ? NEXT_STATUS[t.status] : undefined);
+	let next = $derived(NEXT_STATUS[t.status]);
+	// An order without a tracking number cannot leave Ordered: button shown but disabled.
+	let locked = $derived(!t.tracking_no);
 	let days = $derived(daysInStatus(t, now));
 	let lost = $derived(t.status === 'lost');
 
@@ -155,7 +156,12 @@
 		<!-- Actions -->
 		<div class="flex flex-wrap items-center gap-2">
 			{#if next}
-				<Button class="flex-1 sm:flex-none" onclick={() => (advanceTarget = t)}>
+				<Button
+					class="flex-1 sm:flex-none"
+					disabled={locked}
+					title={locked ? 'Add the tracking number first' : undefined}
+					onclick={() => (advanceTarget = t)}
+				>
 					Mark {STATUS_LABEL[next].toLowerCase()}
 					<ArrowRightIcon />
 				</Button>

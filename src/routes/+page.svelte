@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { navigating } from '$app/state';
-	import { fly } from 'svelte/transition';
+	import { fade, fly } from 'svelte/transition';
 	import { STATUSES } from '$lib/trackings';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -107,17 +107,6 @@
 	});
 	let shownStatus = $derived(pendingStatus ?? data.filter.status);
 
-	// Direction for the mobile card fly-in: moving to a later tab slides in from the right.
-	// svelte-ignore state_referenced_locally
-	let prevStatus = $state<string>(data.filter.status);
-	let flyDir = $state(1);
-	$effect(() => {
-		const cur = data.filter.status;
-		if (cur !== prevStatus) {
-			flyDir = STATUSES.indexOf(cur as Status) >= STATUSES.indexOf(prevStatus as Status) ? 1 : -1;
-			prevStatus = cur;
-		}
-	});
 
 	let dateHead = $derived(data.filter.q ? 'Status date' : DATE_HEAD[data.filter.status as Status]);
 
@@ -377,8 +366,8 @@
 				{@const stale = isStale(t, data.now)}
 				<li
 					class={cn('bg-card min-w-0 rounded-xl border p-4', stale && 'border-amber-500/40 bg-amber-500/5')}
-					in:fly|global={{ x: 32 * flyDir, duration: 220, delay: Math.min(i, 8) * 35 }}
-					out:fly|global={{ x: -32 * flyDir, duration: 140 }}
+					in:fly|global={{ y: 8, duration: 180, delay: Math.min(i, 6) * 20 }}
+					out:fade|global={{ duration: 90 }}
 				>
 					<div class="flex items-start justify-between gap-3">
 						<div class="flex min-w-0 gap-2">
@@ -435,8 +424,13 @@
 								</button>
 							{/if}
 						</div>
-						{#if t.tracking_no && NEXT_STATUS[t.status]}
-							<Button size="sm" variant="outline" onclick={() => (advanceTarget = t)}>
+						{#if NEXT_STATUS[t.status]}
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={!t.tracking_no}
+								onclick={() => (advanceTarget = t)}
+							>
 								{STATUS_LABEL[NEXT_STATUS[t.status]!]}
 							</Button>
 						{/if}

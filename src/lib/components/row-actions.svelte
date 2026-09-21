@@ -16,13 +16,20 @@
 		showPrimary?: boolean;
 	} = $props();
 
-	// An order without a tracking number cannot leave Ordered.
-	let next = $derived(tracking.tracking_no ? NEXT_STATUS[tracking.status] : undefined);
+	let next = $derived(NEXT_STATUS[tracking.status]);
+	// An order without a tracking number cannot leave Ordered: button shown but disabled.
+	let locked = $derived(!tracking.tracking_no);
 </script>
 
 <div class="flex items-center justify-end gap-1">
 	{#if showPrimary && next}
-		<Button size="sm" variant="outline" onclick={() => onAdvance(tracking)}>
+		<Button
+			size="sm"
+			variant="outline"
+			disabled={locked}
+			title={locked ? 'Add the tracking number first' : undefined}
+			onclick={() => onAdvance(tracking)}
+		>
 			{STATUS_LABEL[next]}
 			<ArrowRightIcon />
 		</Button>
