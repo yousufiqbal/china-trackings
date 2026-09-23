@@ -5,7 +5,8 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Textarea } from '$lib/components/ui/textarea';
-	import { formatDate, trackingLabel, type Tracking } from '$lib/trackings';
+	import { destinationLabel, formatDate, trackingLabel, type Tracking } from '$lib/trackings';
+	import Flag from '$lib/components/flag.svelte';
 	import { cn } from '$lib/utils';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import CheckIcon from '@lucide/svelte/icons/check';
@@ -34,7 +35,7 @@
 		if (!included.length) return '';
 		const lines = included.map((t) => {
 			const label = t.tracking_no ?? `[no tracking] ${t.notes ?? ''}`.trim();
-			return `${label} (Delivered on ${longDate(t.delivered_at ?? t.updated_at)})`;
+			return `${label} - ${destinationLabel(t.destination)} (Delivered on ${longDate(t.delivered_at ?? t.updated_at)})`;
 		});
 		return ['Dear forwarder,', '', 'Receipts are required for the following trackings:', ...lines, '', 'Thank you.'].join('\n');
 	});
@@ -120,7 +121,10 @@
 							>
 								<input type="checkbox" checked={picked.has(t.id)} onchange={() => toggle(t.id)} />
 								<span class="min-w-0 flex-1">
-									<span class="font-mono">{trackingLabel(t)}</span>
+									<span class="flex items-center gap-1.5 font-mono">
+										<Flag code={t.destination} />
+										{trackingLabel(t)}
+									</span>
 									{#if t.notes}
 										<span class="text-muted-foreground block truncate text-xs">{t.notes}</span>
 									{/if}

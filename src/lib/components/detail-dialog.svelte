@@ -8,6 +8,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import StatusBadge from '$lib/components/status-badge.svelte';
+	import Flag from '$lib/components/flag.svelte';
 	import EditDialog from '$lib/components/edit-dialog.svelte';
 	import AdvanceDialog from '$lib/components/advance-dialog.svelte';
 	import CommentDialog from '$lib/components/comment-dialog.svelte';
@@ -107,7 +108,8 @@
 		}}
 	>
 		<Dialog.Header class="pr-8 text-left">
-			<div class="flex items-center gap-1">
+			<div class="flex items-center gap-1.5">
+				<Flag code={t.destination} size="lg" />
 				<Dialog.Title
 					class={cn('font-mono text-lg break-all sm:text-xl', !t.tracking_no && 'font-sans text-amber-700 italic dark:text-amber-300')}
 				>

@@ -1,6 +1,7 @@
 import { db, ensureSchema, query, queryMany, queryOne, run } from './db';
 import {
 	isStatus,
+	type Destination,
 	normalizeTrackingNo,
 	type Status,
 	type StatusEvent,
@@ -84,7 +85,7 @@ export type AddOutcome =
  */
 export async function addTracking(
 	rawNumber: string | null,
-	meta: { notes?: string | null; ordered_at?: number | null }
+	meta: { notes?: string | null; ordered_at?: number | null; destination: Destination }
 ): Promise<AddOutcome> {
 	await ensureSchema();
 	const now = Date.now();
@@ -104,9 +105,9 @@ export async function addTracking(
 	const tx = await db.transaction('write');
 	try {
 		const ins = await tx.execute({
-			sql: `INSERT INTO trackings (tracking_no, notes, status, ordered_at, created_at, updated_at)
-				VALUES (?, ?, 'ordered', ?, ?, ?)`,
-			args: [no, notes, orderedAt, now, now]
+			sql: `INSERT INTO trackings (tracking_no, notes, destination, status, ordered_at, created_at, updated_at)
+				VALUES (?, ?, ?, 'ordered', ?, ?, ?)`,
+			args: [no, notes, meta.destination, orderedAt, now, now]
 		});
 		await tx.execute({
 			sql: `INSERT INTO status_events (tracking_id, from_status, to_status, note, at) VALUES (?, NULL, 'ordered', NULL, ?)`,
@@ -204,6 +205,7 @@ export async function setStatus(
 }
 
 export interface UpdateFields {
+	destination?: Destination;
 	/** null clears the number (tracking not yet known) */
 	tracking_no?: string | null;
 	supplier?: string | null;
@@ -239,6 +241,7 @@ export async function updateTracking(id: number, fields: UpdateFields): Promise<
 		args.push(no);
 	}
 	for (const key of [
+		'destination',
 		'supplier',
 		'description',
 		'receipt_ref',

@@ -11,7 +11,7 @@ import {
 } from '$lib/server/trackings';
 import { deletePhoto } from '$lib/server/photos';
 import { attachPhoto, handleAdvance, handleComment, handleSave } from '$lib/server/advance';
-import { isStatus, parseDateInput, type Status } from '$lib/trackings';
+import { isDestination, isStatus, parseDateInput, type Status } from '$lib/trackings';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const s = url.searchParams.get('status');
@@ -38,7 +38,9 @@ export const actions: Actions = {
 		if (!missing && /\s/.test(raw)) return fail(400, { action: 'add', error: 'One tracking number at a time' });
 		const comment = String(form.get('comment') ?? '').trim().slice(0, 2000);
 		const ordered_at = parseDateInput(form.get('ordered_at'));
-		const r = await addTracking(missing ? null : raw, { notes: comment, ordered_at });
+		const dest = form.get('destination');
+		if (!isDestination(dest)) return fail(400, { action: 'add', error: 'Choose a destination country' });
+		const r = await addTracking(missing ? null : raw, { notes: comment, ordered_at, destination: dest });
 		if (!r.ok) return fail(400, { action: 'add', error: r.error });
 		return { action: 'add', tracking_no: r.tracking_no };
 	},

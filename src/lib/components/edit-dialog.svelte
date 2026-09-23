@@ -13,7 +13,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { shrinkPhotoField } from '$lib/resize-image';
 	import { lightbox, openLightbox } from '$lib/lightbox.svelte';
-	import { ACTIVE_STATUSES, trackingLabel, type Tracking } from '$lib/trackings';
+	import { ACTIVE_STATUSES, DESTINATIONS, trackingLabel, type Tracking } from '$lib/trackings';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import PackageXIcon from '@lucide/svelte/icons/package-x';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
@@ -29,6 +29,9 @@
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 	let confirmDelete = $state(false);
+
+	const selectClass =
+		'border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs focus-visible:ring-ring/50 focus-visible:ring-3 outline-none';
 
 	/** Secondary actions live on the dashboard route; call them absolutely so this works from any page. */
 	async function post(action: 'lost' | 'reopen' | 'delete') {
@@ -113,38 +116,52 @@
 				}}
 			>
 				<input type="hidden" name="id" value={tracking.id} />
-				<Dialog.Header class="pr-8">
-					<div class="flex items-start justify-between gap-2">
-						<div>
-							<Dialog.Title>Edit tracking</Dialog.Title>
-							<Dialog.Description class="font-mono">{trackingLabel(tracking)}</Dialog.Description>
-						</div>
-						<DropdownMenu.Root>
-							<DropdownMenu.Trigger>
-								{#snippet child({ props })}
-									<Button {...props} type="button" variant="ghost" size="icon-sm" aria-label="More actions">
-										<EllipsisIcon />
-									</Button>
-								{/snippet}
-							</DropdownMenu.Trigger>
-							<DropdownMenu.Content align="end" class="w-44">
-								{#if ACTIVE_STATUSES.includes(tracking.status)}
-									<DropdownMenu.Item onSelect={() => post('lost')}>
-										<PackageXIcon /> Mark lost
-									</DropdownMenu.Item>
-								{:else}
-									<DropdownMenu.Item onSelect={() => post('reopen')}>
-										<RotateCcwIcon /> Reopen
-									</DropdownMenu.Item>
-								{/if}
-								<DropdownMenu.Separator />
-								<DropdownMenu.Item variant="destructive" onSelect={() => (confirmDelete = true)}>
-									<Trash2Icon /> Delete
-								</DropdownMenu.Item>
-							</DropdownMenu.Content>
-						</DropdownMenu.Root>
-					</div>
+				<Dialog.Header class="pr-20">
+					<Dialog.Title>Edit tracking</Dialog.Title>
+					<Dialog.Description class="font-mono">{trackingLabel(tracking)}</Dialog.Description>
 				</Dialog.Header>
+
+				<!-- sits on the same line as the dialog's own close button (top-4 right-4) -->
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								class="absolute top-4 right-12"
+								aria-label="More actions"
+							>
+								<EllipsisIcon />
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end" class="w-44">
+						{#if ACTIVE_STATUSES.includes(tracking.status)}
+							<DropdownMenu.Item onSelect={() => post('lost')}>
+								<PackageXIcon /> Mark lost
+							</DropdownMenu.Item>
+						{:else}
+							<DropdownMenu.Item onSelect={() => post('reopen')}>
+								<RotateCcwIcon /> Reopen
+							</DropdownMenu.Item>
+						{/if}
+						<DropdownMenu.Separator />
+						<DropdownMenu.Item variant="destructive" onSelect={() => (confirmDelete = true)}>
+							<Trash2Icon /> Delete
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+
+				<div class="grid gap-1.5">
+					<Label for="e-destination">Destination</Label>
+					<select id="e-destination" name="destination" class={selectClass} value={tracking.destination}>
+						{#each DESTINATIONS as d (d.code)}
+							<option value={d.code}>{d.label}</option>
+						{/each}
+					</select>
+				</div>
 
 				<div class="grid gap-1.5">
 					<Label for="e-tracking_no">Tracking number</Label>

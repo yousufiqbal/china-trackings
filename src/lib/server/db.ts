@@ -8,7 +8,7 @@ if (url.startsWith('file:')) mkdirSync(dirname(url.slice(5)), { recursive: true 
 
 export const db = createClient({ url, authToken: env.DATABASE_AUTH_TOKEN || undefined });
 
-const CURRENT_VERSION = '3';
+const CURRENT_VERSION = '4';
 
 const STATUS_CHECK = `CHECK (status IN ('ordered','delivered','warehoused','received','lost'))`;
 
@@ -18,6 +18,7 @@ const TRACKINGS_COLUMNS = `
 		supplier      TEXT,
 		description   TEXT,
 		status        TEXT NOT NULL DEFAULT 'ordered' ${STATUS_CHECK},
+		destination   TEXT NOT NULL DEFAULT 'PK',
 		receipt_ref   TEXT,
 		receipt_photo_id INTEGER REFERENCES photos(id) ON DELETE SET NULL,
 		notes         TEXT,
@@ -56,8 +57,8 @@ async function rebuildTrackings(selectSql: string, version: string) {
 	const tx = await db.transaction('write');
 	try {
 		await tx.execute(`CREATE TABLE trackings_new (${TRACKINGS_COLUMNS})`);
-		await tx.execute(`INSERT INTO trackings_new (id, tracking_no, supplier, description, status, receipt_ref, receipt_photo_id,
-			notes, ordered_at, delivered_at, warehoused_at, received_at, created_at, updated_at) ${selectSql}`);
+		await tx.execute(`INSERT INTO trackings_new (id, tracking_no, supplier, description, status, destination, receipt_ref,
+			receipt_photo_id, notes, ordered_at, delivered_at, warehoused_at, received_at, created_at, updated_at) ${selectSql}`);
 		await tx.execute(`DROP TABLE trackings`);
 		await tx.execute(`ALTER TABLE trackings_new RENAME TO trackings`);
 		await tx.execute(`CREATE INDEX IF NOT EXISTS idx_trackings_status ON trackings(status)`);
@@ -85,7 +86,7 @@ async function migrate() {
 		await rebuildTrackings(
 			`SELECT id, tracking_no, supplier, description,
 				CASE status WHEN 'delivered' THEN 'received' ELSE status END,
-				receipt_ref, receipt_photo_id, notes, ordered_at,
+				'PK', receipt_ref, receipt_photo_id, notes, ordered_at,
 				NULL, warehoused_at,
 				CASE status WHEN 'delivered' THEN delivered_at ELSE NULL END,
 				created_at, updated_at FROM trackings`,
@@ -96,10 +97,15 @@ async function migrate() {
 		return;
 	}
 
+	// v4: destination country. Everything that existed before was going to Pakistan.
+	if (!cols.some((c) => c.name === 'destination')) {
+		await db.execute(`ALTER TABLE trackings ADD COLUMN destination TEXT NOT NULL DEFAULT 'PK'`);
+	}
+
 	// v3: tracking_no may be NULL (order placed, supplier has not given a number yet).
 	if (trackingNoRequired) {
 		await rebuildTrackings(
-			`SELECT id, tracking_no, supplier, description, status, receipt_ref, receipt_photo_id,
+			`SELECT id, tracking_no, supplier, description, status, 'PK', receipt_ref, receipt_photo_id,
 				notes, ordered_at, delivered_at, warehoused_at, received_at, created_at, updated_at FROM trackings`,
 			'3'
 		);

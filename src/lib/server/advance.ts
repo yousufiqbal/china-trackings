@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { getTracking, setStatus, updateTracking } from './trackings';
 import { deletePhoto, savePhoto } from './photos';
-import { NEXT_STATUS, parseDateInput } from '$lib/trackings';
+import { isDestination, NEXT_STATUS, parseDateInput } from '$lib/trackings';
 
 /**
  * Shared form-action body for "advance to next status". Used by the dashboard
@@ -98,8 +98,10 @@ export async function handleSave(id: number, form: FormData) {
 	}
 	if (receipt_photo_id === undefined && form.get('remove_photo') === 'on') receipt_photo_id = null;
 
+	const dest = form.get('destination');
 	const err = await updateTracking(id, {
 		tracking_no: String(form.get('tracking_no') ?? '').trim() || null,
+		destination: isDestination(dest) ? dest : undefined,
 		receipt_ref: String(form.get('receipt_ref') ?? '').trim() || null,
 		notes: String(form.get('notes') ?? '').trim() || null,
 		receipt_photo_id,

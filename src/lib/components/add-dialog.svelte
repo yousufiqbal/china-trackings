@@ -6,13 +6,16 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
-	import { todayInput } from '$lib/trackings';
+	import { DESTINATIONS, todayInput } from '$lib/trackings';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
 	let adding = $state(false);
 	let error = $state<string | null>(null);
 	let noTracking = $state(false);
+
+	const selectClass =
+		'border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs focus-visible:ring-ring/50 focus-visible:ring-3 outline-none';
 </script>
 
 <Dialog.Root
@@ -72,6 +75,16 @@
 					class="font-mono"
 					aria-invalid={error ? 'true' : undefined}
 				/>
+			</div>
+
+			<div class="grid gap-1.5">
+				<Label for="add-destination">Destination</Label>
+				<select id="add-destination" name="destination" class={selectClass} required>
+					<option value="" disabled selected>Select country…</option>
+					{#each DESTINATIONS as d (d.code)}
+						<option value={d.code}>{d.label}</option>
+					{/each}
+				</select>
 			</div>
 
 			<div class="grid gap-1.5">

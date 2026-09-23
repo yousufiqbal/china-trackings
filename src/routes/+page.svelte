@@ -8,6 +8,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import StatusBadge from '$lib/components/status-badge.svelte';
+	import Flag from '$lib/components/flag.svelte';
 	import AddDialog from '$lib/components/add-dialog.svelte';
 	import AdvanceDialog from '$lib/components/advance-dialog.svelte';
 	import CommentDialog from '$lib/components/comment-dialog.svelte';
@@ -65,16 +66,18 @@
 	// svelte-ignore state_referenced_locally
 	let q = $state(data.filter.q);
 
+	// Follow the URL: leaving a search (tab switch, back button) empties the box.
+	$effect(() => {
+		q = data.filter.q;
+	});
+
 
 	let staleCount = $derived(data.trackings.filter((t) => isStale(t, data.now)).length);
 	let activeCount = $derived(data.counts.ordered + data.counts.delivered + data.counts.warehoused);
 
+	/** Switching status always drops the search: a search already spans every status. */
 	function filterHref(status: string) {
-		const p = new URLSearchParams();
-		if (status !== 'ordered') p.set('status', status);
-		if (data.filter.q) p.set('q', data.filter.q);
-		const s = p.toString();
-		return s ? `/?${s}` : '/';
+		return status === 'ordered' ? '/' : `/?status=${status}`;
 	}
 
 	function search(e: SubmitEvent) {
@@ -88,7 +91,7 @@
 
 	function clearSearch() {
 		q = '';
-		goto(filterHref(data.filter.status));
+		goto(filterHref(data.filter.status), { keepFocus: true });
 	}
 
 	const DATE_HEAD: Record<Status, string> = {
@@ -277,6 +280,7 @@
 			<Table.Root>
 				<Table.Header>
 					<Table.Row>
+						<Table.Head class="w-8"><span class="sr-only">Destination</span></Table.Head>
 						<Table.Head>Tracking no.</Table.Head>
 						<Table.Head>Status</Table.Head>
 						<Table.Head>{dateHead}</Table.Head>
@@ -289,6 +293,9 @@
 					{#each data.trackings as t (t.id)}
 						{@const stale = isStale(t, data.now)}
 						<Table.Row class={cn(stale && 'bg-amber-500/5')}>
+							<Table.Cell class="w-8 pr-0">
+								<Flag code={t.destination} size="md" />
+							</Table.Cell>
 							<Table.Cell class="font-mono text-[13px]">
 								<div class="group/no flex items-center gap-1">
 									<button
@@ -372,7 +379,8 @@
 					<div class="flex items-start justify-between gap-3">
 						<div class="flex min-w-0 gap-2">
 							<div class="min-w-0">
-							<div class="flex items-start gap-1">
+							<div class="flex items-start gap-1.5">
+								<Flag code={t.destination} class="mt-1" />
 								<button
 									type="button"
 									class={cn(
