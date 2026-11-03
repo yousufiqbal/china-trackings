@@ -2,7 +2,6 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import {
 	addTracking,
-	appendNote,
 	dashboardData,
 	deleteTracking,
 	getTracking,
@@ -10,6 +9,8 @@ import {
 	updateTracking
 } from '$lib/server/trackings';
 import { deletePhoto } from '$lib/server/photos';
+import { refreshCourier, registerQuietly, syncOrdered } from '$lib/server/courier';
+import { track17Enabled } from '$lib/server/track17';
 import { attachPhoto, handleAdvance, handleComment, handleSave } from '$lib/server/advance';
 import { isDestination, isStatus, parseDateInput, type Status } from '$lib/trackings';
 
@@ -31,17 +32,18 @@ function idFrom(form: FormData): number | null {
 }
 
 export const actions: Actions = {
-	add: async ({ request }) => {
+	add: async ({ request, locals }) => {
 		const form = await request.formData();
 		const missing = form.get('no_tracking') === 'on';
 		const raw = String(form.get('number') ?? '').trim();
 		if (!missing && /\s/.test(raw)) return fail(400, { action: 'add', error: 'One tracking number at a time' });
 		const comment = String(form.get('comment') ?? '').trim().slice(0, 2000);
-		const ordered_at = parseDateInput(form.get('ordered_at'));
+		const ordered_at = parseDateInput(form.get('ordered_at'), locals.tz);
 		const dest = form.get('destination');
 		if (!isDestination(dest)) return fail(400, { action: 'add', error: 'Choose a destination country' });
 		const r = await addTracking(missing ? null : raw, { notes: comment, ordered_at, destination: dest });
 		if (!r.ok) return fail(400, { action: 'add', error: r.error });
+		await registerQuietly([r.tracking_no]);
 		return { action: 'add', tracking_no: r.tracking_no };
 	},
 
@@ -55,20 +57,40 @@ export const actions: Actions = {
 		if (/\s/.test(raw)) return fail(400, { error: 'One tracking number only' });
 		const err = await updateTracking(id, { tracking_no: raw });
 		if (err) return fail(400, { error: err });
+		await registerQuietly([(await getTracking(id))?.tracking_no]);
 		return { saved: true };
 	},
 
-	/** After sending a receipt request to the forwarder: tag those trackings as alerted. */
-	alerted: async ({ request }) => {
+	/** Fetch the latest courier events for one parcel. */
+	courier: async ({ request }) => {
 		const form = await request.formData();
-		const ids = form.getAll('ids').map(Number).filter((n) => Number.isInteger(n) && n > 0);
-		if (!ids.length) return fail(400, { error: 'Nothing selected' });
-		await appendNote(ids, 'Alerted');
-		return { action: 'alerted', count: ids.length };
+		const id = idFrom(form);
+		if (!id) return fail(400, { action: 'courier', error: 'Bad id' });
+		if (!track17Enabled()) return fail(400, { action: 'courier', error: 'TRACK17_KEY is not set' });
+		const t = await getTracking(id);
+		if (!t?.tracking_no) return fail(400, { action: 'courier', error: 'No tracking number' });
+		try {
+			const r = await refreshCourier([t.tracking_no]);
+			if (r.failed.length) return fail(400, { action: 'courier', error: r.failed[0] });
+		} catch (e) {
+			return fail(502, { action: 'courier', error: (e as Error).message });
+		}
+		return { action: 'courier' as const };
+	},
+
+	/** Refresh courier data for every Ordered parcel (also registers ones added before the integration). */
+	sync: async () => {
+		if (!track17Enabled()) return fail(400, { action: 'sync', error: 'TRACK17_KEY is not set' });
+		try {
+			const r = await syncOrdered();
+			return { action: 'sync' as const, updated: r.updated, failed: r.failed.length };
+		} catch (e) {
+			return fail(502, { action: 'sync', error: (e as Error).message });
+		}
 	},
 
 	/** Advance to the next status on the happy path (ordered -> delivered -> warehoused -> received). */
-	advance: async ({ request }) => handleAdvance(await request.formData()),
+	advance: async ({ request, locals }) => handleAdvance(await request.formData(), locals.tz),
 	comment: async ({ request }) => handleComment(await request.formData()),
 
 	/** Drag-and-drop / quick upload of the receipt photo. Moves ordered/delivered -> warehoused. */
@@ -101,11 +123,11 @@ export const actions: Actions = {
 		}
 		return { saved: true };
 	},
-	save: async ({ request }) => {
+	save: async ({ request, locals }) => {
 		const form = await request.formData();
 		const id = idFrom(form);
 		if (!id) return fail(400, { error: 'Bad id' });
-		return handleSave(id, form);
+		return handleSave(id, form, locals.tz);
 	},
 
 	lost: async ({ request }) => {

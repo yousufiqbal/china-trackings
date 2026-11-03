@@ -8,9 +8,19 @@ if (url.startsWith('file:')) mkdirSync(dirname(url.slice(5)), { recursive: true 
 
 export const db = createClient({ url, authToken: env.DATABASE_AUTH_TOKEN || undefined });
 
-const CURRENT_VERSION = '4';
+const CURRENT_VERSION = '5';
 
 const STATUS_CHECK = `CHECK (status IN ('ordered','delivered','warehoused','received','lost'))`;
+
+/** Courier tracking data from 17TRACK (v5). */
+const COURIER_COLUMNS = [
+	['courier', 'TEXT'],
+	['courier_status', 'TEXT'],
+	['courier_event', 'TEXT'],
+	['courier_event_at', 'INTEGER'],
+	['courier_events', 'TEXT'],
+	['courier_checked_at', 'INTEGER']
+] as const;
 
 const TRACKINGS_COLUMNS = `
 		id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +37,8 @@ const TRACKINGS_COLUMNS = `
 		warehoused_at INTEGER,
 		received_at   INTEGER,
 		created_at    INTEGER NOT NULL,
-		updated_at    INTEGER NOT NULL`;
+		updated_at    INTEGER NOT NULL,
+		${COURIER_COLUMNS.map(([name, type]) => `${name} ${type}`).join(', ')}`;
 
 const schema = [
 	`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
@@ -100,6 +111,13 @@ async function migrate() {
 	// v4: destination country. Everything that existed before was going to Pakistan.
 	if (!cols.some((c) => c.name === 'destination')) {
 		await db.execute(`ALTER TABLE trackings ADD COLUMN destination TEXT NOT NULL DEFAULT 'PK'`);
+	}
+
+	// v5: courier tracking columns.
+	for (const [name, type] of COURIER_COLUMNS) {
+		if (!cols.some((c) => c.name === name)) {
+			await db.execute(`ALTER TABLE trackings ADD COLUMN ${name} ${type}`);
+		}
 	}
 
 	// v3: tracking_no may be NULL (order placed, supplier has not given a number yet).

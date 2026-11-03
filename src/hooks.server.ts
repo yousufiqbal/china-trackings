@@ -1,10 +1,14 @@
 import { redirect, type Handle } from '@sveltejs/kit';
 import { readSession } from '$lib/server/auth';
+import { localTzOffset, parseTzOffset, TZ_COOKIE } from '$lib/trackings';
 
-const PUBLIC_PATHS = ['/login'];
+// /api/track17 is the courier webhook; it checks its own signature.
+const PUBLIC_PATHS = ['/login', '/api/track17'];
 
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = readSession(event.cookies);
+	// Until the browser has set the cookie, fall back to the server's own timezone.
+	event.locals.tz = parseTzOffset(event.cookies.get(TZ_COOKIE)) ?? localTzOffset();
 
 	const path = event.url.pathname;
 	const isPublic = PUBLIC_PATHS.includes(path);

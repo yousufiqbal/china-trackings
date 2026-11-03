@@ -4,8 +4,19 @@
 	import Lightbox from '$lib/components/lightbox.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { navigating } from '$app/state';
+	import { onMount } from 'svelte';
+	import { ModeWatcher } from 'mode-watcher';
+	import { localTzOffset, TZ_COOKIE } from '$lib/trackings';
 
-	let { children } = $props();
+	let { data, children } = $props();
+
+	// Tell the server our timezone so day counts and date inputs use local days.
+	onMount(() => {
+		const tz = localTzOffset();
+		if (data.tz === tz) return;
+		document.cookie = `${TZ_COOKIE}=${tz}; path=/; max-age=31536000; samesite=lax`;
+		invalidateAll();
+	});
 </script>
 
 <!-- Installed PWAs keep the page alive in the background; refetch when it comes back. -->
@@ -14,6 +25,8 @@
 		if (document.visibilityState === 'visible') invalidateAll();
 	}}
 />
+<!-- Follows the system light/dark setting. -->
+<ModeWatcher />
 <svelte:window onpageshow={(e) => e.persisted && invalidateAll()} />
 
 <svelte:head>

@@ -15,6 +15,7 @@
 <DetailDialog
 	tracking={data.tracking}
 	now={data.now}
+	tz={data.tz}
 	open={true}
 	showOpenLink={false}
 	onClose={() => goto('/')}

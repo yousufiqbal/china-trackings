@@ -13,6 +13,14 @@ export interface ListFilter {
 	q?: string;
 }
 
+const SORT_COLUMN: Record<Status, string> = {
+	ordered: 'ordered_at',
+	delivered: 'COALESCE(delivered_at, updated_at)',
+	warehoused: 'COALESCE(warehoused_at, updated_at)',
+	received: 'COALESCE(received_at, updated_at)',
+	lost: 'updated_at'
+};
+
 function listSql(filter: ListFilter = {}): { sql: string; args: (string | number)[] } {
 	const where: string[] = [];
 	const args: (string | number)[] = [];
@@ -32,8 +40,10 @@ function listSql(filter: ListFilter = {}): { sql: string; args: (string | number
 		args.push(like, like, like, like, like);
 	}
 
+	// A single-status view sorts by the date it shows (e.g. "Delivered on"); mixed lists by order date.
+	const dateCol = isStatus(filter.status) ? SORT_COLUMN[filter.status] : 'ordered_at';
 	const sql = `SELECT * FROM trackings ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-		ORDER BY ordered_at DESC, id DESC`;
+		ORDER BY ${dateCol} DESC, id DESC`;
 	return { sql, args };
 }
 
@@ -239,6 +249,13 @@ export async function updateTracking(id: number, fields: UpdateFields): Promise<
 		}
 		sets.push('tracking_no = ?');
 		args.push(no);
+		// Courier data belongs to the old number.
+		const current = await getTracking(id);
+		if (current && current.tracking_no !== no) {
+			sets.push(
+				'courier = NULL, courier_status = NULL, courier_event = NULL, courier_event_at = NULL, courier_events = NULL, courier_checked_at = NULL'
+			);
+		}
 	}
 	for (const key of [
 		'destination',
@@ -266,16 +283,4 @@ export async function updateTracking(id: number, fields: UpdateFields): Promise<
 
 export async function deleteTracking(id: number) {
 	await run('DELETE FROM trackings WHERE id = ?', [id]);
-}
-
-/** Append a phrase to the comment of several trackings (used after sending an alert). */
-export async function appendNote(ids: number[], phrase: string) {
-	for (const id of ids) {
-		const t = await getTracking(id);
-		if (!t) continue;
-		const parts = (t.notes ?? '').split(/[,\n]/).map((p) => p.trim().toLowerCase());
-		if (parts.includes(phrase.toLowerCase())) continue;
-		const base = (t.notes ?? '').trim().replace(/,\s*$/, '');
-		await updateTracking(id, { notes: base ? `${base}, ${phrase}` : phrase });
-	}
 }

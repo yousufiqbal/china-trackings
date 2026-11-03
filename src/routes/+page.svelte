@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
+	import { deserialize } from '$app/forms';
 	import { navigating } from '$app/state';
 	import { fade, fly } from 'svelte/transition';
 	import { STATUSES } from '$lib/trackings';
@@ -17,10 +18,12 @@
 	import ReceiptRequestDialog from '$lib/components/receipt-request-dialog.svelte';
 	import TrackingNumberDialog from '$lib/components/tracking-number-dialog.svelte';
 	import RowActions from '$lib/components/row-actions.svelte';
+	import CourierBadge from '$lib/components/courier-badge.svelte';
 	import {
 		STATUS_LABEL,
 		NEXT_STATUS,
 		STALE_AFTER_DAYS,
+		courierSaysDelivered,
 		daysInStatus,
 		formatDate,
 		isStale,
@@ -44,6 +47,7 @@
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import PackageXIcon from '@lucide/svelte/icons/package-x';
 	import BellRingIcon from '@lucide/svelte/icons/bell-ring';
+	import TruckIcon from '@lucide/svelte/icons/truck';
 	import { toast } from 'svelte-sonner';
 
 	let { data } = $props();
@@ -72,7 +76,31 @@
 	});
 
 
-	let staleCount = $derived(data.trackings.filter((t) => isStale(t, data.now)).length);
+	let staleCount = $derived(data.trackings.filter((t) => isStale(t, data.now, data.tz)).length);
+	let courierDelivered = $derived(data.filter.q ? [] : data.trackings.filter(courierSaysDelivered));
+
+	let syncing = $state(false);
+	async function syncCourier() {
+		syncing = true;
+		const id = toast.loading('Checking couriers…');
+		try {
+			const res = await fetch('/?/sync', { method: 'POST', body: new FormData(), headers: { 'x-sveltekit-action': 'true' } });
+			const result = deserialize(await res.text());
+			if (result.type === 'success') {
+				const r = result.data as { updated: number; failed: number };
+				toast.success(`Updated ${r.updated} parcel${r.updated === 1 ? '' : 's'}${r.failed ? `, ${r.failed} failed` : ''}`, { id });
+				await invalidateAll();
+			} else {
+				const err = result.type === 'failure' ? result.data?.error : null;
+				toast.error(String(err ?? 'Sync failed'), { id });
+			}
+		} catch {
+			toast.error('Sync failed', { id });
+		} finally {
+			syncing = false;
+		}
+	}
+
 	let activeCount = $derived(data.counts.ordered + data.counts.delivered + data.counts.warehoused);
 
 	/** Switching status always drops the search: a search already spans every status. */
@@ -140,7 +168,7 @@
 	}
 
 	function ageLabel(t: Tracking) {
-		const d = daysInStatus(t, data.now);
+		const d = daysInStatus(t, data.now, data.tz);
 		return d === 0 ? 'today' : d === 1 ? '1 day ago' : `${d} days ago`;
 	}
 
@@ -180,6 +208,11 @@
 						<BellRingIcon /> Request receipts
 						<span class="text-muted-foreground ml-auto tabular-nums">{data.counts.delivered}</span>
 					</DropdownMenu.Item>
+					{#if data.courierEnabled}
+						<DropdownMenu.Item onSelect={syncCourier} disabled={syncing}>
+							<TruckIcon /> Sync with courier
+						</DropdownMenu.Item>
+					{/if}
 					<DropdownMenu.Item onSelect={() => goto(filterHref('lost'))}>
 						<PackageXIcon /> Lost parcels
 						<span class="text-muted-foreground ml-auto tabular-nums">{data.counts.lost}</span>
@@ -205,13 +238,12 @@
 					shownStatus === tile.status && 'border-primary ring-primary/20 ring-2'
 				)}
 			>
-				<div class="flex items-center justify-between gap-2">
-					<span class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-						{STATUS_LABEL[tile.status]}
-					</span>
-					<StatusBadge status={tile.status} class="hidden sm:inline-flex" />
+				<span class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+					{STATUS_LABEL[tile.status]}
+				</span>
+				<div class={cn('mt-2 text-3xl font-semibold tabular-nums', NAV_COUNT[tile.status])}>
+					{data.counts[tile.status]}
 				</div>
-				<div class="mt-2 text-3xl font-semibold tabular-nums">{data.counts[tile.status]}</div>
 				<div class="text-muted-foreground mt-1 text-xs">{tile.hint}</div>
 			</a>
 		{/each}
@@ -255,15 +287,36 @@
 			</div>
 		{/if}
 
+		{#if courierDelivered.length}
+			<div
+				class="flex items-start gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-800 dark:text-violet-200"
+			>
+				<TruckIcon class="mt-0.5 size-4 shrink-0" />
+				<span>
+					<strong>{courierDelivered.length}</strong> parcel{courierDelivered.length === 1 ? '' : 's'} delivered by the
+					courier but still Ordered. Tap the highlighted <strong>Delivered</strong> button to confirm.
+				</span>
+			</div>
+		{/if}
+
 		{#if staleCount > 0}
 			<div
 				class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
 			>
 				<TriangleAlertIcon class="mt-0.5 size-4 shrink-0" />
 				<span>
-					<strong>{staleCount}</strong> parcel{staleCount === 1 ? '' : 's'} stuck too long — ordered &gt;
-					{STALE_AFTER_DAYS.ordered}d, delivered without receipt &gt; {STALE_AFTER_DAYS.delivered}d, or
-					warehoused &gt; {STALE_AFTER_DAYS.warehoused}d. Chase supplier / warehouse.
+					<strong>{staleCount}</strong> parcel{staleCount === 1 ? '' : 's'} stuck too long —
+					{#if data.filter.q}
+						ordered &gt; {STALE_AFTER_DAYS.ordered}d, delivered without receipt &gt;
+						{STALE_AFTER_DAYS.delivered}d, or warehoused &gt; {STALE_AFTER_DAYS.warehoused}d. Chase supplier /
+						warehouse.
+					{:else if data.filter.status === 'ordered'}
+						ordered &gt; {STALE_AFTER_DAYS.ordered}d. Chase supplier.
+					{:else if data.filter.status === 'delivered'}
+						delivered without receipt &gt; {STALE_AFTER_DAYS.delivered}d. Chase warehouse.
+					{:else}
+						warehoused &gt; {STALE_AFTER_DAYS.warehoused}d. Chase forwarder.
+					{/if}
 				</span>
 			</div>
 		{/if}
@@ -282,7 +335,7 @@
 					<Table.Row>
 						<Table.Head class="w-8"><span class="sr-only">Destination</span></Table.Head>
 						<Table.Head>Tracking no.</Table.Head>
-						<Table.Head>Status</Table.Head>
+						{#if data.filter.q}<Table.Head>Status</Table.Head>{/if}
 						<Table.Head>{dateHead}</Table.Head>
 						{#if showReceipt}<Table.Head>Receipt</Table.Head>{/if}
 						<Table.Head>Comment</Table.Head>
@@ -291,7 +344,7 @@
 				</Table.Header>
 				<Table.Body>
 					{#each data.trackings as t (t.id)}
-						{@const stale = isStale(t, data.now)}
+						{@const stale = isStale(t, data.now, data.tz)}
 						<Table.Row class={cn(stale && 'bg-amber-500/5')}>
 							<Table.Cell class="w-8 pr-0">
 								<Flag code={t.destination} size="md" />
@@ -317,8 +370,19 @@
 										</button>
 									{/if}
 								</div>
+								{#if t.status === 'ordered' && t.courier_status}
+									<button
+										type="button"
+										class="mt-1 flex max-w-full min-w-0 items-center gap-1.5 text-left"
+										onclick={() => (courierSaysDelivered(t) ? (advanceTarget = t) : openRow(t))}
+										title={t.courier_event ?? undefined}
+									>
+										<CourierBadge status={t.courier_status} />
+										{#if t.courier_event}<span class="text-muted-foreground truncate font-sans text-xs">{t.courier_event}</span>{/if}
+									</button>
+								{/if}
 							</Table.Cell>
-							<Table.Cell><StatusBadge status={t.status} /></Table.Cell>
+							{#if data.filter.q}<Table.Cell><StatusBadge status={t.status} /></Table.Cell>{/if}
 							<Table.Cell class="text-sm tabular-nums whitespace-nowrap">
 								<span class={cn(stale && 'font-medium text-amber-700 dark:text-amber-300')}>
 									{#if stale}<TriangleAlertIcon class="mr-1 inline size-3" />{/if}
@@ -370,7 +434,7 @@
 		<!-- Mobile cards -->
 		<ul class="grid min-w-0 gap-3 md:hidden">
 			{#each data.trackings as t, i (t.id)}
-				{@const stale = isStale(t, data.now)}
+				{@const stale = isStale(t, data.now, data.tz)}
 				<li
 					class={cn('bg-card min-w-0 rounded-xl border p-4', stale && 'border-amber-500/40 bg-amber-500/5')}
 					in:fly|global={{ y: 8, duration: 180, delay: Math.min(i, 6) * 20 }}
@@ -402,6 +466,17 @@
 									</button>
 								{/if}
 							</div>
+							{#if t.status === 'ordered' && t.courier_status}
+								<button
+									type="button"
+									class="mt-1 flex max-w-full min-w-0 items-center gap-1.5 text-left"
+									onclick={() => (courierSaysDelivered(t) ? (advanceTarget = t) : openRow(t))}
+									title={t.courier_event ?? undefined}
+								>
+									<CourierBadge status={t.courier_status} />
+									{#if t.courier_event}<span class="text-muted-foreground truncate font-sans text-xs">{t.courier_event}</span>{/if}
+								</button>
+							{/if}
 							<button
 								type="button"
 								class={cn('mt-0.5 flex items-start gap-1 text-left text-xs', t.notes ? 'text-foreground/80' : 'text-muted-foreground')}
@@ -416,10 +491,11 @@
 					</div>
 					<div class="mt-3 flex flex-wrap items-center justify-between gap-2">
 						<div class="flex min-w-0 flex-wrap items-center gap-2">
-							<StatusBadge status={t.status} />
+							{#if data.filter.q}<StatusBadge status={t.status} />{/if}
 							<span class={cn('text-xs tabular-nums', stale ? 'font-medium text-amber-700 dark:text-amber-300' : 'text-muted-foreground')}>
 								{#if stale}<TriangleAlertIcon class="mr-0.5 inline size-3" />{/if}
 								{formatDate(statusSince(t))}
+								<span class={cn(!stale && 'opacity-70')}>· {ageLabel(t)}</span>
 							</span>
 							{#if t.receipt_photo_id}
 								<button
@@ -435,7 +511,7 @@
 						{#if NEXT_STATUS[t.status]}
 							<Button
 								size="sm"
-								variant="outline"
+								variant={courierSaysDelivered(t) ? 'default' : 'outline'}
 								disabled={!t.tracking_no}
 								onclick={() => (advanceTarget = t)}
 							>
@@ -478,11 +554,11 @@
 </nav>
 
 <AddDialog bind:open={addOpen} />
-<ReceiptRequestDialog bind:open={requestOpen} trackings={data.delivered} />
+<ReceiptRequestDialog bind:open={requestOpen} trackings={data.delivered} now={data.now} tz={data.tz} />
 <TrackingNumberDialog bind:tracking={numberTarget} />
 {#if viewTracking}
 	{#key viewTracking.id}
-		<DetailDialog tracking={viewTracking} now={data.now} open={true} onClose={() => (viewId = null)} />
+		<DetailDialog tracking={viewTracking} now={data.now} tz={data.tz} open={true} onClose={() => (viewId = null)} />
 	{/key}
 {/if}
 <AdvanceDialog bind:tracking={advanceTarget} />

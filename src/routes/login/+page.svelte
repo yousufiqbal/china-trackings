@@ -14,7 +14,7 @@
 <div class="flex min-h-[70dvh] items-center justify-center">
 	<Card.Root class="w-full max-w-sm">
 		<Card.Header class="items-center text-center">
-			<img src="/icon.svg" alt="" class="mb-2 size-12 rounded-xl" />
+			<img src="/icon.svg" alt="" class="mx-auto mb-2 size-12 rounded-xl" />
 			<Card.Title class="text-xl">Trackings</Card.Title>
 			<Card.Description>Sign in to manage your parcels</Card.Description>
 		</Card.Header>

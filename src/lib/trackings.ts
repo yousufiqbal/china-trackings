@@ -106,6 +106,63 @@ export interface Tracking {
   received_at: number | null;
   created_at: number;
   updated_at: number;
+  /** Courier name as detected by 17TRACK (e.g. "ZTO Express") */
+  courier: string | null;
+  courier_status: CourierStatus | null;
+  /** Latest courier event text and time */
+  courier_event: string | null;
+  courier_event_at: number | null;
+  /** JSON array of CourierEvent, newest first */
+  courier_events: string | null;
+  /** Last time courier data was fetched; null = never registered with 17TRACK */
+  courier_checked_at: number | null;
+}
+
+/** 17TRACK main statuses. */
+export type CourierStatus =
+  | "NotFound"
+  | "InfoReceived"
+  | "InTransit"
+  | "Expired"
+  | "AvailableForPickup"
+  | "OutForDelivery"
+  | "DeliveryFailure"
+  | "Delivered"
+  | "Exception";
+
+export const COURIER_STATUS_LABEL: Record<CourierStatus, string> = {
+  NotFound: "No info yet",
+  InfoReceived: "Label created",
+  InTransit: "In transit",
+  Expired: "Expired",
+  AvailableForPickup: "Ready for pickup",
+  OutForDelivery: "Out for delivery",
+  DeliveryFailure: "Delivery failed",
+  Delivered: "Delivered",
+  Exception: "Exception",
+};
+
+export interface CourierEvent {
+  at: number | null;
+  text: string;
+  location: string | null;
+}
+
+export function courierEvents(t: Pick<Tracking, "courier_events">): CourierEvent[] {
+  if (!t.courier_events) return [];
+  try {
+    const v = JSON.parse(t.courier_events);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Courier reports it delivered (to the warehouse) but we still have it as Ordered. */
+export function courierSaysDelivered(
+  t: Pick<Tracking, "status" | "courier_status">,
+): boolean {
+  return t.status === "ordered" && t.courier_status === "Delivered";
 }
 
 export interface StatusEvent {
@@ -142,13 +199,43 @@ export function statusSince(t: Tracking): number {
   }
 }
 
-export function daysInStatus(t: Tracking, now = Date.now()): number {
-  return Math.floor((now - statusSince(t)) / 86_400_000);
+/**
+ * Cookie with the browser's UTC offset in minutes (east positive, e.g. 300 for
+ * Pakistan). The server runs in UTC, so it needs this for calendar-day maths.
+ */
+export const TZ_COOKIE = "tz";
+
+export function parseTzOffset(v: string | null | undefined): number | null {
+  const n = Number(v);
+  return v && Number.isInteger(n) && Math.abs(n) <= 14 * 60 ? n : null;
 }
 
-export function isStale(t: Tracking, now = Date.now()): boolean {
+/** UTC offset of the machine running this code, in minutes. */
+export function localTzOffset(): number {
+  return -new Date().getTimezoneOffset();
+}
+
+/** Calendar day number of a timestamp, in the timezone given by `tz` (minutes). */
+export function localDay(ms: number, tz = localTzOffset()): number {
+  return Math.floor((ms + tz * 60_000) / 86_400_000);
+}
+
+/** Calendar days (not 24h periods) since the tracking entered its status. */
+export function daysInStatus(
+  t: Tracking,
+  now = Date.now(),
+  tz = localTzOffset(),
+): number {
+  return localDay(now, tz) - localDay(statusSince(t), tz);
+}
+
+export function isStale(
+  t: Tracking,
+  now = Date.now(),
+  tz = localTzOffset(),
+): boolean {
   const limit = STALE_AFTER_DAYS[t.status];
-  return limit !== undefined && daysInStatus(t, now) > limit;
+  return limit !== undefined && daysInStatus(t, now, tz) > limit;
 }
 
 /** Display text for a tracking, falling back to a label when the number is missing. */
@@ -183,24 +270,21 @@ export function todayInput(now = new Date()): string {
 }
 
 /**
- * Turn a YYYY-MM-DD form value into a timestamp. Today keeps the current time
+ * Turn a YYYY-MM-DD form value into a timestamp, reading the date in the
+ * user's timezone (`tz`, minutes east of UTC). Today keeps the current time
  * (so ordering within the day is preserved); other days use local noon.
  * Returns null for empty/invalid input.
  */
 export function parseDateInput(
   value: FormDataEntryValue | null | undefined,
+  tz = localTzOffset(),
 ): number | null {
   const s = String(value ?? "").trim();
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const now = new Date();
-  if (
-    y === now.getFullYear() &&
-    mo === now.getMonth() + 1 &&
-    d === now.getDate()
-  )
-    return now.getTime();
-  const t = new Date(y, mo - 1, d, 12).getTime();
-  return Number.isNaN(t) ? null : t;
+  const utcMidnight = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(utcMidnight)) return null;
+  const now = Date.now();
+  if (localDay(now, tz) === utcMidnight / 86_400_000) return now;
+  return utcMidnight + 12 * 3_600_000 - tz * 60_000;
 }

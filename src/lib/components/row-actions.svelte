@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { NEXT_STATUS, STATUS_LABEL, type Tracking } from '$lib/trackings';
+	import { courierSaysDelivered, NEXT_STATUS, STATUS_LABEL, type Tracking } from '$lib/trackings';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 
@@ -25,7 +25,7 @@
 	{#if showPrimary && next}
 		<Button
 			size="sm"
-			variant="outline"
+			variant={courierSaysDelivered(tracking) ? 'default' : 'outline'}
 			disabled={locked}
 			title={locked ? 'Add the tracking number first' : undefined}
 			onclick={() => onAdvance(tracking)}

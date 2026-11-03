@@ -7,6 +7,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { DESTINATIONS, todayInput } from '$lib/trackings';
+	import { cn } from '$lib/utils';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -55,13 +56,8 @@
 				<Dialog.Description>One tracking number per entry. Duplicates are rejected.</Dialog.Description>
 			</Dialog.Header>
 
-			<label class="flex cursor-pointer items-center gap-2 text-sm">
-				<input type="checkbox" name="no_tracking" bind:checked={noTracking} />
-				Tracking number not available yet
-			</label>
-
-			<div class="grid gap-1.5" hidden={noTracking}>
-				<Label for="add-number">Tracking number</Label>
+			<div class="grid gap-1.5">
+				<Label for="add-number" class={cn(noTracking && 'hidden')}>Tracking number</Label>
 				<Input
 					id="add-number"
 					name="number"
@@ -72,9 +68,13 @@
 					autocapitalize="characters"
 					spellcheck={false}
 					placeholder="YT2512345678901234"
-					class="font-mono"
 					aria-invalid={error ? 'true' : undefined}
+					class={cn('font-mono', noTracking && 'hidden')}
 				/>
+				<label class="text-muted-foreground flex cursor-pointer items-center gap-2 text-sm">
+					<input type="checkbox" name="no_tracking" bind:checked={noTracking} />
+					Supplier hasn't given a tracking number yet
+				</label>
 			</div>
 
 			<div class="grid gap-1.5">

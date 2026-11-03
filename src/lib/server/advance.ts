@@ -1,13 +1,14 @@
 import { fail } from '@sveltejs/kit';
 import { getTracking, setStatus, updateTracking } from './trackings';
 import { deletePhoto, savePhoto } from './photos';
-import { isDestination, NEXT_STATUS, parseDateInput } from '$lib/trackings';
+import { registerQuietly } from './courier';
+import { isDestination, localDay, NEXT_STATUS, parseDateInput } from '$lib/trackings';
 
 /**
  * Shared form-action body for "advance to next status". Used by the dashboard
  * and the detail page so the AdvanceDialog works from either.
  */
-export async function handleAdvance(form: FormData) {
+export async function handleAdvance(form: FormData, tz: number) {
 	const id = Number(form.get('id'));
 	if (!Number.isInteger(id) || id <= 0) return fail(400, { action: 'advance', error: 'Bad id' });
 
@@ -28,7 +29,7 @@ export async function handleAdvance(form: FormData) {
 		await setStatus(id, to, {
 			receipt_ref: to === 'warehoused' ? receipt_ref : undefined,
 			receipt_photo_id: photoId ?? undefined,
-			at: parseDateInput(form.get('at')) ?? undefined
+			at: parseDateInput(form.get('at'), tz) ?? undefined
 		});
 	} catch (e) {
 		await deletePhoto(photoId);
@@ -71,21 +72,21 @@ export async function handleComment(form: FormData) {
 }
 
 /** <input type="date"> gives YYYY-MM-DD; keep the original time-of-day if the day is unchanged. */
-function dateFrom(value: FormDataEntryValue | null, previous: number | null): number | null | undefined {
+function dateFrom(
+	value: FormDataEntryValue | null,
+	previous: number | null,
+	tz: number
+): number | null | undefined {
 	if (value === null) return undefined;
-	const s = String(value).trim();
-	if (!s) return null;
-	const [y, m, d] = s.split('-').map(Number);
-	if (!y || !m || !d) return undefined;
-	const prev = previous ? new Date(previous) : null;
-	if (prev && prev.getFullYear() === y && prev.getMonth() === m - 1 && prev.getDate() === d) {
-		return previous;
-	}
-	return new Date(y, m - 1, d, 12).getTime();
+	if (!String(value).trim()) return null;
+	const t = parseDateInput(value, tz);
+	if (t === null) return undefined;
+	if (previous && localDay(previous, tz) === localDay(t, tz)) return previous;
+	return t;
 }
 
 /** Shared form-action body for the Edit dialog. */
-export async function handleSave(id: number, form: FormData) {
+export async function handleSave(id: number, form: FormData, tz: number) {
 	const current = await getTracking(id);
 	if (!current) return fail(404, { error: 'Not found' });
 
@@ -105,15 +106,17 @@ export async function handleSave(id: number, form: FormData) {
 		receipt_ref: String(form.get('receipt_ref') ?? '').trim() || null,
 		notes: String(form.get('notes') ?? '').trim() || null,
 		receipt_photo_id,
-		ordered_at: dateFrom(form.get('ordered_at'), current.ordered_at) ?? undefined,
-		delivered_at: dateFrom(form.get('delivered_at'), current.delivered_at),
-		warehoused_at: dateFrom(form.get('warehoused_at'), current.warehoused_at),
-		received_at: dateFrom(form.get('received_at'), current.received_at)
+		ordered_at: dateFrom(form.get('ordered_at'), current.ordered_at, tz) ?? undefined,
+		delivered_at: dateFrom(form.get('delivered_at'), current.delivered_at, tz),
+		warehoused_at: dateFrom(form.get('warehoused_at'), current.warehoused_at, tz),
+		received_at: dateFrom(form.get('received_at'), current.received_at, tz)
 	});
 	if (err) {
 		await deletePhoto(receipt_photo_id);
 		return fail(400, { error: err });
 	}
+	const updated = await getTracking(id);
+	if (updated?.tracking_no && updated.tracking_no !== current.tracking_no) await registerQuietly([updated.tracking_no]);
 	// Old photo is unreferenced now that the update succeeded.
 	if (receipt_photo_id !== undefined) await deletePhoto(current.receipt_photo_id);
 	// A receipt photo means the warehouse acknowledged it.
