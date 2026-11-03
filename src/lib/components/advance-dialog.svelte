@@ -7,16 +7,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import FileDrop from '$lib/components/file-drop.svelte';
 	import { resizeImage } from '$lib/resize-image';
-	import {
-		courierSaysDelivered,
-		formatDate,
-		NEXT_STATUS,
-		STATUS_LABEL,
-		todayInput,
-		trackingLabel,
-		type Status,
-		type Tracking
-	} from '$lib/trackings';
+	import { NEXT_STATUS, STATUS_LABEL, todayInput, trackingLabel, type Status, type Tracking } from '$lib/trackings';
 
 	let {
 		tracking = $bindable(null),
@@ -27,10 +18,6 @@
 	let photo = $state<File | null>(null);
 	let open = $derived(tracking !== null);
 	let next = $derived(tracking ? NEXT_STATUS[tracking.status] : undefined);
-	/** Courier's own delivery time, used as the default "Delivered on" date. */
-	let courierDeliveredAt = $derived(
-		tracking && courierSaysDelivered(tracking) ? tracking.courier_event_at : null
-	);
 
 	const TITLE: Partial<Record<Status, string>> = {
 		delivered: 'Delivered to warehouse',
@@ -91,14 +78,7 @@
 
 				<div class="grid gap-2">
 					<Label for="adv-at">{DATE_LABEL[next]}</Label>
-					<Input
-							id="adv-at"
-							name="at"
-							type="date"
-							value={todayInput(courierDeliveredAt ? new Date(courierDeliveredAt) : undefined)}
-							max={todayInput()}
-							required
-						/>
+					<Input id="adv-at" name="at" type="date" value={todayInput()} max={todayInput()} required />
 				</div>
 
 				{#if next === 'warehoused'}
@@ -107,14 +87,7 @@
 						<FileDrop bind:file={photo} />
 					</div>
 				{:else}
-					<p class="text-muted-foreground text-sm">
-						{#if courierDeliveredAt}
-							Courier reports it delivered on {formatDate(courierDeliveredAt)}. The warehouse has not issued a
-							receipt yet.
-						{:else}
-							{HELP[next]}
-						{/if}
-					</p>
+					<p class="text-muted-foreground text-sm">{HELP[next]}</p>
 				{/if}
 
 				<Dialog.Footer>

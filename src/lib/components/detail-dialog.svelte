@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -15,18 +14,14 @@
 	import CommentDialog from '$lib/components/comment-dialog.svelte';
 	import PhotoDropzone from '$lib/components/photo-dropzone.svelte';
 	import TrackingNumberDialog from '$lib/components/tracking-number-dialog.svelte';
-	import CourierBadge from '$lib/components/courier-badge.svelte';
 	import { lightbox } from '$lib/lightbox.svelte';
 	import {
 		STATUSES,
 		STATUS_LABEL,
 		STATUS_HINT,
 		NEXT_STATUS,
-		courierEvents,
-		courierSaysDelivered,
 		daysInStatus,
 		formatDate,
-		formatDateTime,
 		isStale,
 		trackingLabel,
 		type Status,
@@ -68,10 +63,6 @@
 	let locked = $derived(!t.tracking_no);
 	let days = $derived(daysInStatus(t, now, tz));
 	let lost = $derived(t.status === 'lost');
-
-	let events = $derived(courierEvents(t));
-	let showAllEvents = $state(false);
-	let checking = $state(false);
 
 	let editOpen = $state(false);
 	let statusOpen = $state(false);
@@ -258,92 +249,6 @@
 				</li>
 			{/each}
 		</ol>
-
-		<!-- Courier tracking (17TRACK) -->
-		{#if page.data.courierEnabled && t.tracking_no}
-			<section class="grid gap-2">
-				<div class="flex items-start justify-between gap-2">
-					<div class="min-w-0">
-						<h3 class="flex flex-wrap items-center gap-2 text-sm font-medium">
-							Courier tracking
-							{#if t.courier_status}<CourierBadge status={t.courier_status} />{/if}
-						</h3>
-						<p class="text-muted-foreground text-xs">
-							{[t.courier ?? 'Courier not detected yet', t.courier_checked_at && `checked ${formatDateTime(t.courier_checked_at)}`]
-								.filter(Boolean)
-								.join(' · ')}
-						</p>
-					</div>
-					<form
-						method="POST"
-						action="/?/courier"
-						use:enhance={() => {
-							checking = true;
-							return async ({ result }) => {
-								checking = false;
-								if (result.type === 'success') await invalidateAll();
-								else if (result.type === 'failure') toast.error(String(result.data?.error ?? 'Check failed'));
-							};
-						}}
-					>
-						<input type="hidden" name="id" value={t.id} />
-						<Button type="submit" size="sm" variant="outline" disabled={checking}>
-							<RefreshCwIcon class={cn(checking && 'animate-spin')} />
-							{checking ? 'Checking…' : 'Check now'}
-						</Button>
-					</form>
-				</div>
-
-				{#if courierSaysDelivered(t)}
-					<div
-						class="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-800 dark:text-violet-200"
-					>
-						<span class="flex-1">
-							Courier shows it delivered{#if t.courier_event_at}{' '}on <strong>{formatDate(t.courier_event_at)}</strong>{/if}.
-						</span>
-						<Button size="sm" onclick={() => (advanceTarget = t)}>Mark delivered <ArrowRightIcon /></Button>
-					</div>
-				{/if}
-
-				{#if events.length}
-					<ol class="rounded-lg border px-3 py-1">
-						{#each showAllEvents ? events : events.slice(0, 4) as e, i (i)}
-							<li class="relative flex gap-3 py-2">
-								<span
-									class={cn(
-										'mt-1.5 size-2 shrink-0 rounded-full',
-										i === 0 ? 'bg-primary ring-primary/20 ring-4' : 'bg-border'
-									)}
-								></span>
-								<div class="min-w-0 flex-1">
-									<p class={cn('text-sm break-words', i > 0 && 'text-muted-foreground')}>{e.text}</p>
-									<p class="text-muted-foreground text-xs">
-										{[e.at ? formatDateTime(e.at) : '', e.location].filter(Boolean).join(' · ')}
-									</p>
-								</div>
-							</li>
-						{/each}
-					</ol>
-					{#if events.length > 4}
-						<button
-							type="button"
-							class="text-muted-foreground hover:text-foreground justify-self-start text-xs underline"
-							onclick={() => (showAllEvents = !showAllEvents)}
-						>
-							{showAllEvents ? 'Show less' : `Show all ${events.length} events`}
-						</button>
-					{/if}
-				{:else}
-					<p class="text-muted-foreground rounded-lg border border-dashed px-4 py-4 text-center text-sm">
-						{#if t.courier_checked_at}
-							No courier events yet. 17TRACK checks again every 6–12 hours.
-						{:else}
-							Not checked yet. Press <strong>Check now</strong>.
-						{/if}
-					</p>
-				{/if}
-			</section>
-		{/if}
 
 		<!-- Receipt photo -->
 		<div class="grid gap-2">

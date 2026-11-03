@@ -106,63 +106,6 @@ export interface Tracking {
   received_at: number | null;
   created_at: number;
   updated_at: number;
-  /** Courier name as detected by 17TRACK (e.g. "ZTO Express") */
-  courier: string | null;
-  courier_status: CourierStatus | null;
-  /** Latest courier event text and time */
-  courier_event: string | null;
-  courier_event_at: number | null;
-  /** JSON array of CourierEvent, newest first */
-  courier_events: string | null;
-  /** Last time courier data was fetched; null = never registered with 17TRACK */
-  courier_checked_at: number | null;
-}
-
-/** 17TRACK main statuses. */
-export type CourierStatus =
-  | "NotFound"
-  | "InfoReceived"
-  | "InTransit"
-  | "Expired"
-  | "AvailableForPickup"
-  | "OutForDelivery"
-  | "DeliveryFailure"
-  | "Delivered"
-  | "Exception";
-
-export const COURIER_STATUS_LABEL: Record<CourierStatus, string> = {
-  NotFound: "No info yet",
-  InfoReceived: "Label created",
-  InTransit: "In transit",
-  Expired: "Expired",
-  AvailableForPickup: "Ready for pickup",
-  OutForDelivery: "Out for delivery",
-  DeliveryFailure: "Delivery failed",
-  Delivered: "Delivered",
-  Exception: "Exception",
-};
-
-export interface CourierEvent {
-  at: number | null;
-  text: string;
-  location: string | null;
-}
-
-export function courierEvents(t: Pick<Tracking, "courier_events">): CourierEvent[] {
-  if (!t.courier_events) return [];
-  try {
-    const v = JSON.parse(t.courier_events);
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Courier reports it delivered (to the warehouse) but we still have it as Ordered. */
-export function courierSaysDelivered(
-  t: Pick<Tracking, "status" | "courier_status">,
-): boolean {
-  return t.status === "ordered" && t.courier_status === "Delivered";
 }
 
 export interface StatusEvent {

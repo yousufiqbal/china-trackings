@@ -25,19 +25,6 @@ npm run dev
 
 Open http://localhost:5173 and log in with the credentials from `.env`.
 
-## Courier tracking (17TRACK)
-
-Optional. Shows the courier's own events (ZTO, STO, Yunda, YTO, J&T, SF…) and flags
-parcels the courier has delivered to the warehouse while they are still *Ordered*.
-
-1. Create an account at https://api.17track.net and copy the API key into `TRACK17_KEY`.
-2. In the 17TRACK dashboard set the webhook URL to `https://<your-domain>/api/track17`
-   so updates arrive automatically (17TRACK re-checks every 6-12 hours).
-3. Use **Sync with courier** in the menu once to register parcels added before the key was set.
-
-New numbers are registered automatically (1 quota each; the free plan covers small volumes).
-SF Express may need the receiver's phone digits and can show no events without them.
-
 ## Database
 
 Raw SQL over `@libsql/client`. Tables are created automatically on first request.
@@ -54,6 +41,6 @@ before upload, so a typical receipt is 100-400 KB.
 Deploys to Vercel (adapter-vercel). Import the repo, framework preset "SvelteKit", and add
 these Environment Variables in the Vercel project settings:
 
-`ADMIN_USER`, `ADMIN_PASS`, `SESSION_SECRET`, `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `TRACK17_KEY` (optional)
+`ADMIN_USER`, `ADMIN_PASS`, `SESSION_SECRET`, `DATABASE_URL`, `DATABASE_AUTH_TOKEN`
 
 Photos live in Turso, so nothing is written to disk.

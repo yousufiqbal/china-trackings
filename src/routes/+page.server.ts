@@ -9,8 +9,6 @@ import {
 	updateTracking
 } from '$lib/server/trackings';
 import { deletePhoto } from '$lib/server/photos';
-import { refreshCourier, registerQuietly, syncOrdered } from '$lib/server/courier';
-import { track17Enabled } from '$lib/server/track17';
 import { attachPhoto, handleAdvance, handleComment, handleSave } from '$lib/server/advance';
 import { isDestination, isStatus, parseDateInput, type Status } from '$lib/trackings';
 
@@ -43,7 +41,6 @@ export const actions: Actions = {
 		if (!isDestination(dest)) return fail(400, { action: 'add', error: 'Choose a destination country' });
 		const r = await addTracking(missing ? null : raw, { notes: comment, ordered_at, destination: dest });
 		if (!r.ok) return fail(400, { action: 'add', error: r.error });
-		await registerQuietly([r.tracking_no]);
 		return { action: 'add', tracking_no: r.tracking_no };
 	},
 
@@ -57,36 +54,7 @@ export const actions: Actions = {
 		if (/\s/.test(raw)) return fail(400, { error: 'One tracking number only' });
 		const err = await updateTracking(id, { tracking_no: raw });
 		if (err) return fail(400, { error: err });
-		await registerQuietly([(await getTracking(id))?.tracking_no]);
 		return { saved: true };
-	},
-
-	/** Fetch the latest courier events for one parcel. */
-	courier: async ({ request }) => {
-		const form = await request.formData();
-		const id = idFrom(form);
-		if (!id) return fail(400, { action: 'courier', error: 'Bad id' });
-		if (!track17Enabled()) return fail(400, { action: 'courier', error: 'TRACK17_KEY is not set' });
-		const t = await getTracking(id);
-		if (!t?.tracking_no) return fail(400, { action: 'courier', error: 'No tracking number' });
-		try {
-			const r = await refreshCourier([t.tracking_no]);
-			if (r.failed.length) return fail(400, { action: 'courier', error: r.failed[0] });
-		} catch (e) {
-			return fail(502, { action: 'courier', error: (e as Error).message });
-		}
-		return { action: 'courier' as const };
-	},
-
-	/** Refresh courier data for every Ordered parcel (also registers ones added before the integration). */
-	sync: async () => {
-		if (!track17Enabled()) return fail(400, { action: 'sync', error: 'TRACK17_KEY is not set' });
-		try {
-			const r = await syncOrdered();
-			return { action: 'sync' as const, updated: r.updated, failed: r.failed.length };
-		} catch (e) {
-			return fail(502, { action: 'sync', error: (e as Error).message });
-		}
 	},
 
 	/** Advance to the next status on the happy path (ordered -> delivered -> warehoused -> received). */

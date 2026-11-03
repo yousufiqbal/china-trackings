@@ -249,13 +249,6 @@ export async function updateTracking(id: number, fields: UpdateFields): Promise<
 		}
 		sets.push('tracking_no = ?');
 		args.push(no);
-		// Courier data belongs to the old number.
-		const current = await getTracking(id);
-		if (current && current.tracking_no !== no) {
-			sets.push(
-				'courier = NULL, courier_status = NULL, courier_event = NULL, courier_event_at = NULL, courier_events = NULL, courier_checked_at = NULL'
-			);
-		}
 	}
 	for (const key of [
 		'destination',

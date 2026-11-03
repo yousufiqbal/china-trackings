@@ -2,8 +2,7 @@ import { redirect, type Handle } from '@sveltejs/kit';
 import { readSession } from '$lib/server/auth';
 import { localTzOffset, parseTzOffset, TZ_COOKIE } from '$lib/trackings';
 
-// /api/track17 is the courier webhook; it checks its own signature.
-const PUBLIC_PATHS = ['/login', '/api/track17'];
+const PUBLIC_PATHS = ['/login'];
 
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = readSession(event.cookies);

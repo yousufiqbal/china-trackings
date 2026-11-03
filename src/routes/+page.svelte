@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
-	import { deserialize } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { navigating } from '$app/state';
 	import { fade, fly } from 'svelte/transition';
 	import { STATUSES } from '$lib/trackings';
@@ -18,12 +17,10 @@
 	import ReceiptRequestDialog from '$lib/components/receipt-request-dialog.svelte';
 	import TrackingNumberDialog from '$lib/components/tracking-number-dialog.svelte';
 	import RowActions from '$lib/components/row-actions.svelte';
-	import CourierBadge from '$lib/components/courier-badge.svelte';
 	import {
 		STATUS_LABEL,
 		NEXT_STATUS,
 		STALE_AFTER_DAYS,
-		courierSaysDelivered,
 		daysInStatus,
 		formatDate,
 		isStale,
@@ -47,7 +44,6 @@
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import PackageXIcon from '@lucide/svelte/icons/package-x';
 	import BellRingIcon from '@lucide/svelte/icons/bell-ring';
-	import TruckIcon from '@lucide/svelte/icons/truck';
 	import { toast } from 'svelte-sonner';
 
 	let { data } = $props();
@@ -77,30 +73,6 @@
 
 
 	let staleCount = $derived(data.trackings.filter((t) => isStale(t, data.now, data.tz)).length);
-	let courierDelivered = $derived(data.filter.q ? [] : data.trackings.filter(courierSaysDelivered));
-
-	let syncing = $state(false);
-	async function syncCourier() {
-		syncing = true;
-		const id = toast.loading('Checking couriers…');
-		try {
-			const res = await fetch('/?/sync', { method: 'POST', body: new FormData(), headers: { 'x-sveltekit-action': 'true' } });
-			const result = deserialize(await res.text());
-			if (result.type === 'success') {
-				const r = result.data as { updated: number; failed: number };
-				toast.success(`Updated ${r.updated} parcel${r.updated === 1 ? '' : 's'}${r.failed ? `, ${r.failed} failed` : ''}`, { id });
-				await invalidateAll();
-			} else {
-				const err = result.type === 'failure' ? result.data?.error : null;
-				toast.error(String(err ?? 'Sync failed'), { id });
-			}
-		} catch {
-			toast.error('Sync failed', { id });
-		} finally {
-			syncing = false;
-		}
-	}
-
 	let activeCount = $derived(data.counts.ordered + data.counts.delivered + data.counts.warehoused);
 
 	/** Switching status always drops the search: a search already spans every status. */
@@ -208,11 +180,6 @@
 						<BellRingIcon /> Request receipts
 						<span class="text-muted-foreground ml-auto tabular-nums">{data.counts.delivered}</span>
 					</DropdownMenu.Item>
-					{#if data.courierEnabled}
-						<DropdownMenu.Item onSelect={syncCourier} disabled={syncing}>
-							<TruckIcon /> Sync with courier
-						</DropdownMenu.Item>
-					{/if}
 					<DropdownMenu.Item onSelect={() => goto(filterHref('lost'))}>
 						<PackageXIcon /> Lost parcels
 						<span class="text-muted-foreground ml-auto tabular-nums">{data.counts.lost}</span>
@@ -287,18 +254,6 @@
 			</div>
 		{/if}
 
-		{#if courierDelivered.length}
-			<div
-				class="flex items-start gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-800 dark:text-violet-200"
-			>
-				<TruckIcon class="mt-0.5 size-4 shrink-0" />
-				<span>
-					<strong>{courierDelivered.length}</strong> parcel{courierDelivered.length === 1 ? '' : 's'} delivered by the
-					courier but still Ordered. Tap the highlighted <strong>Delivered</strong> button to confirm.
-				</span>
-			</div>
-		{/if}
-
 		{#if staleCount > 0}
 			<div
 				class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
@@ -370,17 +325,6 @@
 										</button>
 									{/if}
 								</div>
-								{#if t.status === 'ordered' && t.courier_status}
-									<button
-										type="button"
-										class="mt-1 flex max-w-full min-w-0 items-center gap-1.5 text-left"
-										onclick={() => (courierSaysDelivered(t) ? (advanceTarget = t) : openRow(t))}
-										title={t.courier_event ?? undefined}
-									>
-										<CourierBadge status={t.courier_status} />
-										{#if t.courier_event}<span class="text-muted-foreground truncate font-sans text-xs">{t.courier_event}</span>{/if}
-									</button>
-								{/if}
 							</Table.Cell>
 							{#if data.filter.q}<Table.Cell><StatusBadge status={t.status} /></Table.Cell>{/if}
 							<Table.Cell class="text-sm tabular-nums whitespace-nowrap">
@@ -466,17 +410,6 @@
 									</button>
 								{/if}
 							</div>
-							{#if t.status === 'ordered' && t.courier_status}
-								<button
-									type="button"
-									class="mt-1 flex max-w-full min-w-0 items-center gap-1.5 text-left"
-									onclick={() => (courierSaysDelivered(t) ? (advanceTarget = t) : openRow(t))}
-									title={t.courier_event ?? undefined}
-								>
-									<CourierBadge status={t.courier_status} />
-									{#if t.courier_event}<span class="text-muted-foreground truncate font-sans text-xs">{t.courier_event}</span>{/if}
-								</button>
-							{/if}
 							<button
 								type="button"
 								class={cn('mt-0.5 flex items-start gap-1 text-left text-xs', t.notes ? 'text-foreground/80' : 'text-muted-foreground')}
@@ -511,7 +444,7 @@
 						{#if NEXT_STATUS[t.status]}
 							<Button
 								size="sm"
-								variant={courierSaysDelivered(t) ? 'default' : 'outline'}
+								variant="outline"
 								disabled={!t.tracking_no}
 								onclick={() => (advanceTarget = t)}
 							>

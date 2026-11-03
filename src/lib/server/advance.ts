@@ -1,7 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { getTracking, setStatus, updateTracking } from './trackings';
 import { deletePhoto, savePhoto } from './photos';
-import { registerQuietly } from './courier';
 import { isDestination, localDay, NEXT_STATUS, parseDateInput } from '$lib/trackings';
 
 /**
@@ -115,8 +114,6 @@ export async function handleSave(id: number, form: FormData, tz: number) {
 		await deletePhoto(receipt_photo_id);
 		return fail(400, { error: err });
 	}
-	const updated = await getTracking(id);
-	if (updated?.tracking_no && updated.tracking_no !== current.tracking_no) await registerQuietly([updated.tracking_no]);
 	// Old photo is unreferenced now that the update succeeded.
 	if (receipt_photo_id !== undefined) await deletePhoto(current.receipt_photo_id);
 	// A receipt photo means the warehouse acknowledged it.
