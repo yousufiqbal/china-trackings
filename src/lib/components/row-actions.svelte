@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { NEXT_STATUS, STATUS_LABEL, type Tracking } from '$lib/trackings';
+	import { ACTION_LABEL, NEXT_STATUS, type Tracking } from '$lib/trackings';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 
@@ -30,7 +30,7 @@
 			title={locked ? 'Add the tracking number first' : undefined}
 			onclick={() => onAdvance(tracking)}
 		>
-			{STATUS_LABEL[next]}
+			{ACTION_LABEL[next]}
 			<ArrowRightIcon />
 		</Button>
 	{/if}

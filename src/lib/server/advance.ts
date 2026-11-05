@@ -4,8 +4,7 @@ import { deletePhoto, savePhoto } from './photos';
 import { isDestination, localDay, NEXT_STATUS, parseDateInput } from '$lib/trackings';
 
 /**
- * Shared form-action body for "advance to next status". Used by the dashboard
- * and the detail page so the AdvanceDialog works from either.
+ * Form-action body for "advance to next status", used by the AdvanceDialog.
  */
 export async function handleAdvance(form: FormData, tz: number) {
 	const id = Number(form.get('id'));

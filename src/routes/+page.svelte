@@ -18,6 +18,7 @@
 	import TrackingNumberDialog from '$lib/components/tracking-number-dialog.svelte';
 	import RowActions from '$lib/components/row-actions.svelte';
 	import {
+		ACTION_LABEL,
 		STATUS_LABEL,
 		NEXT_STATUS,
 		STALE_AFTER_DAYS,
@@ -448,7 +449,7 @@
 								disabled={!t.tracking_no}
 								onclick={() => (advanceTarget = t)}
 							>
-								{STATUS_LABEL[NEXT_STATUS[t.status]!]}
+								{ACTION_LABEL[NEXT_STATUS[t.status]!]}
 							</Button>
 						{/if}
 					</div>

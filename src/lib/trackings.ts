@@ -32,6 +32,13 @@ export const NEXT_STATUS: Partial<Record<Status, Status>> = {
   warehoused: "received",
 };
 
+/** Button text for moving a parcel into a status. */
+export const ACTION_LABEL: Partial<Record<Status, string>> = {
+  delivered: "Deliver It",
+  warehoused: "Warehouse It",
+  received: "Receive It",
+};
+
 /** Statuses that still need something to happen. */
 export const ACTIVE_STATUSES: Status[] = ["ordered", "delivered", "warehoused"];
 

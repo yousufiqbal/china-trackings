@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { deserialize, enhance } from '$app/forms';
-	import { goto, invalidateAll } from '$app/navigation';
-	import { page } from '$app/state';
+	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -33,7 +32,7 @@
 	const selectClass =
 		'border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs focus-visible:ring-ring/50 focus-visible:ring-3 outline-none';
 
-	/** Secondary actions live on the dashboard route; call them absolutely so this works from any page. */
+	/** Secondary actions live on the dashboard route. */
 	async function post(action: 'lost' | 'reopen' | 'delete') {
 		const body = new FormData();
 		body.set('id', String(tracking.id));
@@ -53,8 +52,7 @@
 			);
 			open = false;
 			onDone?.();
-			if (action === 'delete' && page.url.pathname.startsWith('/t/')) await goto('/');
-			else await invalidateAll();
+			await invalidateAll();
 		} else if (result.type === 'failure') {
 			toast.error(String(result.data?.error ?? 'Something went wrong'));
 		} else {

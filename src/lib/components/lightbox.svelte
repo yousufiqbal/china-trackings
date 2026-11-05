@@ -3,7 +3,6 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import ZoomInIcon from '@lucide/svelte/icons/zoom-in';
 	import ZoomOutIcon from '@lucide/svelte/icons/zoom-out';
-	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 
 	const MIN = 1;
 	const MAX = 6;
@@ -170,14 +169,6 @@
 			>
 				<ZoomInIcon class="size-5" />
 			</button>
-			<a
-				href={lightbox.src}
-				target="_blank"
-				class="rounded-full p-2 hover:bg-white/10"
-				aria-label="Open original"
-			>
-				<ExternalLinkIcon class="size-5" />
-			</a>
 			<button class="ml-1 rounded-full p-2 hover:bg-white/10" onclick={close} aria-label="Close">
 				<XIcon class="size-6" />
 			</button>

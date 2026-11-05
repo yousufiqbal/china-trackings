@@ -7,7 +7,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import FileDrop from '$lib/components/file-drop.svelte';
 	import { resizeImage } from '$lib/resize-image';
-	import { NEXT_STATUS, STATUS_LABEL, todayInput, trackingLabel, type Status, type Tracking } from '$lib/trackings';
+	import { ACTION_LABEL, NEXT_STATUS, STATUS_LABEL, todayInput, trackingLabel, type Status, type Tracking } from '$lib/trackings';
 
 	let {
 		tracking = $bindable(null),
@@ -93,7 +93,7 @@
 				<Dialog.Footer>
 					<Button type="button" variant="outline" onclick={() => (tracking = null)}>Cancel</Button>
 					<Button type="submit" disabled={submitting}>
-						{submitting ? 'Saving…' : `Mark ${STATUS_LABEL[next].toLowerCase()}`}
+						{submitting ? 'Saving…' : ACTION_LABEL[next]}
 					</Button>
 				</Dialog.Footer>
 			</form>

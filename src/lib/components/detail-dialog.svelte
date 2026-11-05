@@ -20,6 +20,7 @@
 		STATUS_LABEL,
 		STATUS_HINT,
 		NEXT_STATUS,
+		ACTION_LABEL,
 		daysInStatus,
 		formatDate,
 		isStale,
@@ -36,15 +37,13 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
-	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 
 	let {
 		tracking,
 		open = $bindable(false),
 		onClose,
 		now = Date.now(),
-		tz,
-		showOpenLink = true
+		tz
 	}: {
 		tracking: Tracking;
 		open?: boolean;
@@ -52,8 +51,6 @@
 		now?: number;
 		/** user's UTC offset in minutes (from layout data) */
 		tz?: number;
-		/** hide the "open page" link when already on /t/[id] */
-		showOpenLink?: boolean;
 	} = $props();
 
 	let t = $derived(tracking);
@@ -123,17 +120,6 @@
 						<CopyIcon />
 					</Button>
 				{/if}
-				{#if showOpenLink}
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						href="/t/{t.id}"
-						aria-label="Open as page"
-						title="Open as page"
-					>
-						<ExternalLinkIcon />
-					</Button>
-				{/if}
 			</div>
 			<Dialog.Description class="sr-only">Tracking details</Dialog.Description>
 			<button
@@ -167,7 +153,7 @@
 					title={locked ? 'Add the tracking number first' : undefined}
 					onclick={() => (advanceTarget = t)}
 				>
-					Mark {STATUS_LABEL[next].toLowerCase()}
+					{ACTION_LABEL[next]}
 					<ArrowRightIcon />
 				</Button>
 			{/if}
@@ -304,7 +290,7 @@
 			<input type="hidden" name="id" value={t.id} />
 			<Dialog.Header>
 				<Dialog.Title>Change status</Dialog.Title>
-				<Dialog.Description>For corrections. Normal flow uses the "Mark …" button.</Dialog.Description>
+				<Dialog.Description>For corrections. Normal flow uses the "Deliver It", "Warehouse It" and "Receive It" buttons.</Dialog.Description>
 			</Dialog.Header>
 			<div class="grid gap-1.5">
 				<Label for="status">Status</Label>
